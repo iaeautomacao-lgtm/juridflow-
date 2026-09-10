@@ -1,93 +1,328 @@
-# Guia de Implantação: JuridFlow no cPanel (Node.js + MariaDB / MySQL)
+# Implantação do JuridFlow no cPanel
 
-Este documento instrui passo a passo como publicar o **JuridFlow** em uma hospedagem **cPanel** padrão utilizando banco de dados **MariaDB ou MySQL**.
+Publicação em hospedagem cPanel com MariaDB/MySQL.
 
----
-
-## 1. Criar o Banco de Dados MariaDB/MySQL no cPanel
-
-1. Acesse o **cPanel** da sua hospedagem.
-2. Vá em **Bancos de dados MySQL®** ou **Assistente de Banco de Dados MySQL**.
-3. Crie um novo banco de dados (exemplo: `seuusuario_juridflow_db`).
-4. Crie um novo usuário MySQL (exemplo: `seuusuario_juridflow_user`) e defina uma senha forte.
-5. Adicione o usuário ao banco de dados concedendo **TODOS OS PRIVILÉGIOS**.
+> **Este guia foi reescrito em 10/09/2026.** A versão anterior era da fase
+> ACORDIO e prescrevia um `JWT_SECRET` literal, omitia `CORS_ORIGINS` (hoje
+> obrigatório) e mandava usar `prisma db push` em vez das migrations. Se você
+> seguiu a versão antiga, releia a seção 3.
 
 ---
 
-## 2. Configurar a String de Conexão no Backend (`.env`)
+## 0. Antes de comprar domínio — verifique isto
 
-No arquivo `backend/.env`, configure a variável `DATABASE_URL` para o formato MySQL/MariaDB:
+Duas checagens que decidem se o deploy é possível. Faça as duas **antes** de
+gastar dinheiro.
+
+### O plano tem aplicação Node.js?
+
+No cPanel, procure **Setup Node.js App** (ou *Criar Aplicação Node.js*).
+
+- **Existe** → segue o guia.
+- **Não existe** → o backend não roda nessa hospedagem. Planos cPanel só com
+  PHP não executam Node. Alternativas: pedir upgrade ao provedor, ou hospedar
+  o backend num VPS e deixar só o frontend no cPanel.
+
+### Você precisa de domínio novo?
+
+Não necessariamente. Um **subdomínio** de domínio que o Grupo DDM já tem
+resolve, é gratuito e sai no ar em minutos:
+
+```
+juridflow.grupoddm.com.br        frontend
+api.juridflow.grupoddm.com.br    backend
+```
+
+Domínio novo só se quiser identidade própria para o produto.
+
+> **Isso não tem relação com o ambiente local.** MariaDB no seu Windows roda em
+> `localhost:3306`, sem domínio, sem cPanel e sem internet. Os dois ambientes
+> são independentes — veja a seção 8.
+
+---
+
+## 1. Criar o banco no cPanel
+
+1. **Bancos de dados MySQL®** → criar banco: `usuario_juridflow`
+2. Criar usuário: `usuario_juridflow_app`, com **senha forte gerada pelo
+   painel**
+3. Adicionar o usuário ao banco com **todos os privilégios**
+4. Anote banco, usuário e senha — vão para a `DATABASE_URL`
+
+O cPanel prefixa tudo com o nome da sua conta. O nome final é o que o painel
+mostrar, não o que você digitou.
+
+---
+
+## 2. Preparar os arquivos localmente
+
+O cPanel não compila TypeScript. O build sai da sua máquina.
+
+```bash
+# backend
+cd backend
+npm ci
+npm run build          # gera backend/dist
+
+# frontend
+cd ../frontend
+```
+
+O frontend precisa saber onde está a API **no momento do build** — depois não
+dá para mudar sem rebuildar. Edite `frontend/.env`:
+
+```env
+# subdomínio separado para a API:
+VITE_API_URL="https://api.juridflow.grupoddm.com.br/api"
+
+# ou mesmo domínio, API sob /api:
+# VITE_API_URL="https://juridflow.grupoddm.com.br/api"
+```
+
+```bash
+npm run build          # gera frontend/dist
+```
+
+---
+
+## 3. Variáveis de ambiente do backend
+
+`lib/config.ts` valida no boot e **derruba o processo** se algo faltar. Isso é
+intencional: melhor não subir do que subir insegura.
+
+| Variável | Regra |
+|---|---|
+| `DATABASE_URL` | credencial da seção 1 |
+| `JWT_SECRET` | **mínimo 32 caracteres, gerado agora, só para produção** |
+| `CORS_ORIGINS` | **obrigatória em produção** — domínio do frontend |
+| `NODE_ENV` | `production` |
+| `DATAJUD_API_KEY` | chave pública do CNJ |
+| `SEED_ADMIN_PASSWORD` | só se for rodar o seed — veja a seção 6 |
+
+### Gere o JWT_SECRET — não copie de lugar nenhum
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+```
+
+> ⚠️ **Nunca use um segredo que esteja escrito em documentação, exemplo ou
+> repositório.** Segredo publicado é segredo comprometido — qualquer pessoa com
+> acesso ao código assina um token válido de produção e entra como qualquer
+> usuário.
+>
+> `lib/config.ts` mantém uma lista de bloqueio dos valores que já vazaram e
+> recusa subir com eles. A lista não é proteção suficiente: ela pega o que já se
+> sabe ter vazado, não o que você inventar agora.
+
+O `.env` de produção é criado **no servidor**, pelo painel ou por SSH. Nunca
+suba um `.env` preenchido — o `.gitignore` bloqueia, e é para continuar assim.
+
+Modelo (substitua todos os valores):
 
 ```env
 PORT=3001
-DATABASE_URL="mysql://seuusuario_juridflow_user:SuaSenhaForte123@localhost:3306/seuusuario_juridflow_db"
-JWT_SECRET="juridflow-secret-key-2026-juridico-multitenant"
-CREDENTIALS_ENCRYPTION_KEY="sua-chave-criptografia-aes256-presto"
-NODE_ENV="production"
+NODE_ENV=production
+
+DATABASE_URL="mysql://usuario_juridflow_app:SENHA@localhost:3306/usuario_juridflow"
+
+JWT_SECRET="<cole aqui o valor gerado pelo comando acima>"
+JWT_EXPIRES_IN="12h"
+
+CORS_ORIGINS="https://juridflow.grupoddm.com.br"
+
+DATAJUD_API_KEY="<chave pública do CNJ>"
+DATAJUD_TIMEOUT_MS=20000
+DJEN_API_URL="https://comunica.pje.jus.br/api/v1/comunicacao"
+DJEN_TIMEOUT_MS=20000
 ```
+
+Se a senha do banco tiver caractere reservado de URL (`@ / ? # [ ]`), aplique
+percent-encoding: `@` vira `%40`, `#` vira `%23`. Sem isso o Prisma lê a senha
+cortada e falha com *access denied* sem explicar o motivo.
+
+`CREDENTIALS_ENCRYPTION_KEY` **não existe mais** — o cofre de credenciais foi
+removido do projeto. Se a viu num guia antigo, ignore.
 
 ---
 
-## 3. Alterar o Provider do Prisma para MySQL
+## 4. Subir o backend
 
-No arquivo `backend/prisma/schema.prisma`, altere a linha `datasource db`:
-
-```prisma
-datasource db {
-  provider = "mysql"
-  url      = env("DATABASE_URL")
-}
-```
-
-Em seguida, no terminal da sua máquina local ou via SSH no cPanel:
-```bash
-cd backend
-npx prisma db push
-npx ts-node src/seed.ts
-```
-> *(Isso criará automaticamente todas as tabelas e o seed de dados no MariaDB/MySQL).*
-
----
-
-## 4. Subir a Aplicação Node.js no cPanel
-
-1. No cPanel, vá em **Setup Node.js App** (ou **Criar Aplicação Node.js**).
-2. Clique em **Create Application**.
-3. Defina:
-   - **Node.js version**: `18.x` ou `20.x`
+1. **Setup Node.js App** → *Create Application*
+   - **Node.js version**: 18.x ou 20.x
    - **Application mode**: `Production`
    - **Application root**: `juridflow-backend`
-   - **Application URL**: `api.seudominio.com.br` ou `seudominio.com.br/api`
+   - **Application URL**: `api.juridflow.grupoddm.com.br`
    - **Application startup file**: `dist/server.js`
-4. Faça upload dos arquivos compilados da pasta `backend/dist` e `package.json`.
-5. Clique em **Run NPM Install** no painel do cPanel.
-6. Clique em **Restart Application**.
+
+2. Enviar para a pasta `juridflow-backend`:
+
+```
+dist/                 build do backend
+prisma/               schema.prisma + migrations/  (necessário para o migrate)
+package.json
+package-lock.json
+.env                  criado no servidor, nunca enviado
+```
+
+3. **Run NPM Install** no painel
+
+4. Criar as tabelas — no terminal da aplicação (o painel oferece um, ou use
+   SSH):
+
+```bash
+npx prisma migrate deploy
+```
+
+> Use `migrate deploy`, **não** `prisma db push`. O `push` sincroniza o schema
+> ignorando o histórico de migrations e pode apagar coluna sem avisar. Em
+> produção, `deploy` aplica só as migrations pendentes, na ordem, e falha em
+> vez de improvisar.
+
+5. **Restart Application**
+
+6. Conferir:
+
+```bash
+curl https://api.juridflow.grupoddm.com.br/health
+```
+
+Deve responder `{"status":"OK",...}`. Se não subir, veja o log da aplicação no
+painel — `config.ts` diz exatamente qual variável faltou.
 
 ---
 
-## 5. Publicar o Frontend React no cPanel
+## 5. Subir o frontend
 
-1. Na sua máquina local, gere a pasta de distribuição do frontend:
-   ```bash
-   cd frontend
-   npm run build
-   ```
-2. A pasta `frontend/dist` será gerada com os arquivos estáticos compilados.
-3. No cPanel, abra o **Gerenciador de Arquivos**.
-4. Vá até a pasta `public_html` (ou no subdomínio desejado).
-5. Envie todo o conteúdo interno da pasta `frontend/dist` para dentro da `public_html`.
-6. Crie um arquivo `.htaccess` na raiz da `public_html` para suportar roteamento SPA do React:
+1. cPanel → **Gerenciador de Arquivos**
+2. Ir na pasta do subdomínio (ou `public_html`)
+3. Enviar **o conteúdo de dentro** de `frontend/dist` — não a pasta `dist` em
+   si
+4. Criar `.htaccess` na raiz, para o roteamento da aplicação:
 
 ```apache
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
-  RewriteRule ^index\.html$ - [L]
-  RewriteCond %{REQUEST_FILENAME} !-f
-  RewriteCond %{REQUEST_FILENAME} !-i
-  RewriteCond %{REQUEST_FILENAME} !-d
+
+  # Arquivo ou diretório existente é servido direto.
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Qualquer outra rota cai no index.html, que a aplicação resolve.
   RewriteRule . /index.html [L]
+</IfModule>
+
+# Cache longo para os assets com hash no nome; nunca para o index.html.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|css|woff2?|svg|png|jpg|jpeg|webp)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+  <FilesMatch "index\.html$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
 </IfModule>
 ```
 
-PRONTO! A aplicação **JuridFlow** estará no ar no cPanel utilizando o banco de dados MariaDB/MySQL com suporte total a auditoria LGPD e cofre de credenciais Presto!
+### SSL
+
+cPanel → **SSL/TLS Status** → *Run AutoSSL*, nos dois subdomínios.
+
+HTTPS não é opcional: sem ele, a senha do usuário e o token JWT trafegam em
+texto claro. E `CORS_ORIGINS` aponta para `https://` — em `http://` o navegador
+bloqueia as chamadas.
+
+---
+
+## 6. Primeiro acesso
+
+**Não rode `npm run seed` em produção.** Ele cria quatro usuários com e-mail
+`@juridflow.local`, um domínio inexistente, com a mesma senha para todos. É
+dado de desenvolvimento.
+
+Em produção, o caminho é:
+
+1. Rodar o seed **uma vez**, só para criar o escritório e o usuário sócio,
+   com variáveis reais:
+
+```bash
+SEED_TENANT_NOME="Grupo DDM" \
+SEED_EMAIL_DOMINIO="grupoddm.com.br" \
+SEED_ADMIN_PASSWORD="<senha forte, temporária>" \
+npx ts-node src/seed.ts
+```
+
+2. Entrar como `socio@grupoddm.com.br`
+3. **Trocar a senha no primeiro acesso**
+4. Cadastrar a equipe real em **Configurações → Perfis & Permissões**, com o
+   cargo de cada um
+
+---
+
+## 7. Cron da captura
+
+A aplicação Node no cPanel **hiberna quando fica ociosa**. Sem um cron
+chamando o endpoint, a captura do DJEN só roda quando alguém clica no botão.
+
+cPanel → **Cron Jobs**. Duas vezes ao dia, manhã e fim de tarde, para pegar a
+publicação do dia:
+
+```
+0 8,18 * * *   curl -s -X POST https://api.juridflow.grupoddm.com.br/api/captura/sincronizar-djen -H "Authorization: Bearer <token>" > /dev/null
+```
+
+O endpoint exige autenticação. Duas opções, nenhuma perfeita:
+
+- **Token de longa duração** para um usuário de serviço. Simples, mas o token
+  fica escrito no cron.
+- **Endpoint interno** com segredo próprio em variável de ambiente, aceitando
+  só chamada local. Mais seguro, mas exige código novo.
+
+Hoje nenhuma das duas está implementada. Enquanto isso, a captura é manual
+pelo botão. Pendência registrada em `DOCUMENTACAO.md`, seção 16.
+
+---
+
+## 8. Ambiente local x produção
+
+Confusão comum, então explícito:
+
+| | Local | Produção |
+|---|---|---|
+| Onde roda | seu Windows | cPanel |
+| Banco | MariaDB em `localhost:3306` | MariaDB do cPanel |
+| Domínio | nenhum — `localhost:5173` | `juridflow.grupoddm.com.br` |
+| Precisa de internet | não | sim |
+| Dados | seed de teste | dados reais do escritório |
+| Para que serve | desenvolver e testar antes de publicar | o escritório usar |
+
+**Você precisa dos dois.** Sem ambiente local, cada mudança tem que ser
+enviada ao servidor para ser testada, e o bug aparece com o escritório usando.
+Instalar o MariaDB local não exige domínio nem cPanel — instruções no
+`README.md`.
+
+---
+
+## 9. Verificação pós-deploy
+
+| # | Verificar | Esperado |
+|---|---|---|
+| 1 | `GET /health` na API | `{"status":"OK"}` |
+| 2 | Frontend abre no domínio | tela de Login |
+| 3 | Login com o sócio | entra no painel |
+| 4 | Recarregar numa tela interna | não dá 404 (`.htaccess` funcionando) |
+| 5 | Cadeado HTTPS nos dois domínios | válido |
+| 6 | `GET /api/processos` sem token | `401` |
+| 7 | Login como financeiro → aba Financeiro | acessa |
+| 8 | Login como advogado → aba Financeiro | escondida, e `403` se forçar |
+| 9 | Disparar captura DJEN com a OAB real | intimações chegam |
+| 10 | Consultar um CNJ real no DataJud | dados retornam |
+| 11 | Trilha de auditoria como sócio | registros aparecem |
+| 12 | Trilha de auditoria como advogado | `403` |
+
+O item 6 é o mais importante: confirma que a autenticação está de fato
+recusando. Era exatamente o defeito da primeira versão do projeto.
+
+E **meça o atraso do DataJud** (item 10) comparando com o portal do tribunal.
+Enquanto esse número não for conhecido, ninguém sabe se um prazo foi calculado
+sobre dado velho. É o único item que envolve responsabilidade profissional.

@@ -32,10 +32,22 @@ function obrigatorio(nome: string, minimo = 1): string {
  * antigos.
  */
 const SEGREDOS_PROIBIDOS = [
+  // Vazaram no commit raiz do repositorio antigo, quando o produto se
+  // chamava ACORDIO.
   'acordio-secret-key-2026-juridico-multitenant',
   'acordio-presto-vault-secret-key-2026',
+
+  // Variantes com o nome novo: o rename para JuridFlow reescreveu o
+  // DEPLOY_CPANEL_MYSQL.md, que prescrevia o segredo como valor a usar, e o
+  // arquivo entrou no commit e2e3082. A string passou a existir no
+  // repositorio, logo esta comprometida pelo mesmo motivo que as de cima.
+  'juridflow-secret-key-2026-juridico-multitenant',
+  'juridflow-presto-vault-secret-key-2026',
+
+  // Placeholders que aparecem em tutorial e em copia-e-cola apressado.
   'changeme',
   'secret',
+  'sua-chave-criptografia-aes256-presto',
 ];
 
 export interface Config {

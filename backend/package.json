@@ -15,7 +15,8 @@
     "migrate:status": "prisma migrate status",
     "seed": "ts-node src/seed.ts",
     "studio": "prisma studio",
-    "verificar": "ts-node scripts/verificar-calendario.ts && ts-node scripts/verificar-auth.ts",
+    "verificar": "ts-node scripts/verificar-calendario.ts && ts-node scripts/verificar-auth.ts && ts-node scripts/verificar-config.ts",
+    "verificar:config": "ts-node scripts/verificar-config.ts",
     "verificar:auth": "ts-node scripts/verificar-auth.ts"
   },
   "dependencies": {
