@@ -98,6 +98,44 @@ if [ ! -f .env ]; then
   MIGRACAO_OK=0
 elif npx prisma migrate deploy; then
   echo "  migrations aplicadas"
+
+  # O Prisma nao emite clausula de engine: herda o default do servidor. Se o
+  # default for MyISAM, as tabelas nascem sem suporte a chave estrangeira - o
+  # MySQL aceita a sintaxe das FKs e ignora em silencio, e o cascade a partir
+  # de Tenant deixa de existir. Conferir e obrigatorio, nao opcional.
+  MYISAM=$(node -e '
+    require("dotenv").config();
+    const u = new URL(process.env.DATABASE_URL);
+    const cp = require("child_process");
+    const sql = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND engine<>\"InnoDB\";";
+    try {
+      // Senha via MYSQL_PWD, nao via -p: argumento de linha de comando
+      // aparece no ps para qualquer usuario da maquina, e isto e hospedagem
+      // compartilhada.
+      const out = cp.execFileSync("mysql", [
+        "-u", decodeURIComponent(u.username),
+        "-h", u.hostname, "-N", "-B",
+        decodeURIComponent(u.pathname.slice(1)), "-e", sql
+      ], {
+        stdio: ["ignore", "pipe", "ignore"],
+        env: { ...process.env, MYSQL_PWD: decodeURIComponent(u.password) }
+      });
+      process.stdout.write(String(out).trim());
+    } catch { process.stdout.write("?"); }
+  ' 2>/dev/null)
+
+  if [ "$MYISAM" = "0" ]; then
+    echo "  todas as tabelas em InnoDB"
+  elif [ "$MYISAM" = "?" ]; then
+    echo "  AVISO: nao consegui verificar o engine das tabelas."
+  else
+    echo
+    echo "  ALERTA: $MYISAM tabela(s) fora do InnoDB."
+    echo "  Chave estrangeira nao funciona em MyISAM - o MySQL ignora em"
+    echo "  silencio, e o cascade a partir de Tenant deixa de existir."
+    echo "  A migration precisa declarar ENGINE = InnoDB explicitamente."
+    MIGRACAO_OK=0
+  fi
 else
   MIGRACAO_OK=0
   echo

@@ -1,3 +1,27 @@
+-- JuridFlow - schema inicial
+--
+-- ENGINE = InnoDB e ROW_FORMAT = DYNAMIC sao explicitos de proposito.
+--
+-- O Prisma nao emite clausula de engine: ele herda o default do servidor. No
+-- cPanel usado em producao o default e MyISAM, e isso quebra duas coisas:
+--
+--   1. Limite de indice de 1000 bytes. Os indices compostos daqui somam
+--      1528 bytes (duas colunas VARCHAR(191) em utf8mb4, 764 bytes cada) e a
+--      migration falhava com "Specified key was too long" (erro 1071).
+--
+--   2. MyISAM NAO SUPORTA chave estrangeira. Ele aceita a sintaxe e ignora
+--      em silencio. As 19 FKs abaixo, com ON DELETE CASCADE a partir de
+--      Tenant, simplesmente nao existiriam - apagar um escritorio deixaria
+--      registro orfao em 16 tabelas, sem erro nenhum. O isolamento
+--      multi-tenant depende desse cascade.
+--
+-- O item 2 e o grave: sem ele o banco perde integridade referencial em
+-- silencio. InnoDB com ROW_FORMAT DYNAMIC tambem eleva o limite de indice
+-- para 3072 bytes, resolvendo o item 1.
+--
+-- Migration nova gerada pelo Prisma vem SEM engine: conferir antes de
+-- aplicar. Ver DEPLOY_CPANEL_MYSQL.md.
+
 -- CreateTable
 CREATE TABLE `Tenant` (
     `id` VARCHAR(191) NOT NULL,
@@ -7,7 +31,7 @@ CREATE TABLE `Tenant` (
     `atualizado_em` DATETIME(3) NOT NULL,
 
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `User` (
@@ -24,7 +48,7 @@ CREATE TABLE `User` (
     UNIQUE INDEX `User_email_key`(`email`),
     INDEX `User_tenant_id_idx`(`tenant_id`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `Processo` (
@@ -48,7 +72,7 @@ CREATE TABLE `Processo` (
     INDEX `Processo_tenant_id_cnj_idx`(`tenant_id`, `cnj`),
     INDEX `Processo_tenant_id_status_idx`(`tenant_id`, `status`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `Atendimento` (
@@ -68,7 +92,7 @@ CREATE TABLE `Atendimento` (
     INDEX `Atendimento_tenant_id_idx`(`tenant_id`),
     INDEX `Atendimento_tenant_id_fase_idx`(`tenant_id`, `fase`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `ContratoHonorarios` (
@@ -89,7 +113,7 @@ CREATE TABLE `ContratoHonorarios` (
     INDEX `ContratoHonorarios_tenant_id_idx`(`tenant_id`),
     INDEX `ContratoHonorarios_tenant_id_status_idx`(`tenant_id`, `status`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `Pessoa` (
@@ -108,7 +132,7 @@ CREATE TABLE `Pessoa` (
     INDEX `Pessoa_tenant_id_idx`(`tenant_id`),
     INDEX `Pessoa_tenant_id_cpf_cnpj_idx`(`tenant_id`, `cpf_cnpj`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `Andamento` (
@@ -130,7 +154,7 @@ CREATE TABLE `Andamento` (
     INDEX `Andamento_tenant_id_chave_modulo_codigo_registro_vinculo_idx`(`tenant_id`, `chave_modulo`, `codigo_registro_vinculo`),
     INDEX `Andamento_tenant_id_lido_idx`(`tenant_id`, `lido`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `Tarefa` (
@@ -154,7 +178,7 @@ CREATE TABLE `Tarefa` (
     INDEX `Tarefa_tenant_id_chave_modulo_codigo_registro_vinculo_idx`(`tenant_id`, `chave_modulo`, `codigo_registro_vinculo`),
     INDEX `Tarefa_tenant_id_status_idx`(`tenant_id`, `status`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `Documento` (
@@ -171,7 +195,7 @@ CREATE TABLE `Documento` (
     INDEX `Documento_tenant_id_idx`(`tenant_id`),
     INDEX `Documento_tenant_id_chave_modulo_codigo_registro_vinculo_idx`(`tenant_id`, `chave_modulo`, `codigo_registro_vinculo`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `Financeiro` (
@@ -194,7 +218,7 @@ CREATE TABLE `Financeiro` (
     INDEX `Financeiro_tenant_id_chave_modulo_codigo_registro_vinculo_idx`(`tenant_id`, `chave_modulo`, `codigo_registro_vinculo`),
     INDEX `Financeiro_tenant_id_tipo_receita_despesa_idx`(`tenant_id`, `tipo_receita_despesa`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `Intimacao` (
@@ -218,7 +242,7 @@ CREATE TABLE `Intimacao` (
     INDEX `Intimacao_processo_id_idx`(`processo_id`),
     UNIQUE INDEX `Intimacao_tenant_id_id_externo_key`(`tenant_id`, `id_externo`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `CapturaPush` (
@@ -237,7 +261,7 @@ CREATE TABLE `CapturaPush` (
     INDEX `CapturaPush_tenant_id_idx`(`tenant_id`),
     INDEX `CapturaPush_tenant_id_cnj_idx`(`tenant_id`, `cnj`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `FranquiaCaptura` (
@@ -254,7 +278,7 @@ CREATE TABLE `FranquiaCaptura` (
 
     INDEX `FranquiaCaptura_tenant_id_idx`(`tenant_id`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `Feriado` (
@@ -271,7 +295,7 @@ CREATE TABLE `Feriado` (
     INDEX `Feriado_data_idx`(`data`),
     INDEX `Feriado_tenant_id_data_idx`(`tenant_id`, `data`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `ModeloDocumento` (
@@ -284,7 +308,7 @@ CREATE TABLE `ModeloDocumento` (
 
     INDEX `ModeloDocumento_tenant_id_idx`(`tenant_id`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `AuditLog` (
@@ -303,7 +327,7 @@ CREATE TABLE `AuditLog` (
     INDEX `AuditLog_tenant_id_timestamp_idx`(`tenant_id`, `timestamp`),
     INDEX `AuditLog_tenant_id_entidade_entidade_id_idx`(`tenant_id`, `entidade`, `entidade_id`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
 CREATE TABLE `CertificadoDigital` (
@@ -320,7 +344,7 @@ CREATE TABLE `CertificadoDigital` (
     INDEX `CertificadoDigital_tenant_id_idx`(`tenant_id`),
     INDEX `CertificadoDigital_tenant_id_validade_idx`(`tenant_id`, `validade`),
     PRIMARY KEY (`id`)
-) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE = InnoDB ROW_FORMAT = DYNAMIC DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- AddForeignKey
 ALTER TABLE `User` ADD CONSTRAINT `User_tenant_id_fkey` FOREIGN KEY (`tenant_id`) REFERENCES `Tenant`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;

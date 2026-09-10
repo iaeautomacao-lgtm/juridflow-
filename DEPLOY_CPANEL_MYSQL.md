@@ -221,6 +221,25 @@ package-lock.json
 npx prisma migrate deploy
 ```
 
+> ### ⚠️ Engine das tabelas: InnoDB, não MyISAM
+>
+> O Prisma **não emite cláusula de engine** — herda o default do servidor. Se
+> o default for MyISAM, duas coisas quebram:
+>
+> 1. **Limite de índice de 1000 bytes.** Os índices compostos do schema somam
+>    1528 bytes (duas colunas `VARCHAR(191)` em `utf8mb4`), e a migration falha
+>    com `Specified key was too long` (erro 1071).
+> 2. **MyISAM não suporta chave estrangeira.** Aceita a sintaxe e ignora em
+>    silêncio. As 19 FKs com `ON DELETE CASCADE` a partir de `Tenant` deixam de
+>    existir — apagar um escritório deixa registro órfão em 16 tabelas, sem
+>    erro. O isolamento multi-tenant depende desse cascade.
+>
+> O item 2 é o grave: perde-se integridade referencial sem aviso.
+>
+> A migration inicial já declara `ENGINE = InnoDB ROW_FORMAT = DYNAMIC`.
+> **Migration nova gerada pelo Prisma vem sem isso** — confira antes de
+> aplicar. O `deploy-cpanel.sh` verifica o engine depois do migrate e alerta.
+
 > Use `migrate deploy`, **não** `prisma db push`. O `push` sincroniza o schema
 > ignorando o histórico de migrations e pode apagar coluna sem avisar. Em
 > produção, `deploy` aplica só as migrations pendentes, na ordem, e falha em
