@@ -126,8 +126,12 @@ npm run build                  # tsc --noEmit && vite build
 │   └── src/
 │       ├── pages/             12 telas
 │       ├── components/        layout, assistente Flow, comuns
+│   └── public/.htaccess       Apache: roteamento SPA, cache, cabeçalhos
 │       ├── context/           AuthContext
 │       └── services/          http (Bearer, base URL) + api tipada
+├── scripts/
+│   └── deploy-cpanel.sh      deploy no servidor: build, migrations, publicação
+├── .cpanel.yml               tarefas do Deploy HEAD Commit do cPanel
 ├── docker-compose.yml         MariaDB local (opcional, alternativa ao nativo)
 ├── DOCUMENTACAO.md            documentação completa
 ├── RELATORIO_ARQUITETURA.md   decisões e justificativas

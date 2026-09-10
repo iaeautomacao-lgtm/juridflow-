@@ -1,0 +1,43 @@
+---
+# Deploy do frontend do JuridFlow pelo Git Version Control do cPanel.
+#
+# O painel executa estas tarefas quando voce clica em "Deploy HEAD Commit",
+# na aba Gerenciar do repositorio.
+#
+# O QUE ELE FAZ
+#   Copia frontend/dist/ para o Document Root do subdominio.
+#
+# O QUE ELE NAO FAZ, E POR QUE
+#   Nao compila. `frontend/dist` esta no .gitignore - build nao entra em
+#   repositorio - entao o clone no servidor tem so o codigo-fonte. E o shell
+#   das tarefas de deploy do cPanel nao carrega o PATH do Node da aplicacao,
+#   logo `npm` normalmente nao existe aqui.
+#
+#   O build roda antes, no terminal da aplicacao Node:
+#
+#     cd ~/repositories/juridflow-
+#     git pull
+#     cd frontend && npm ci && npm run build
+#
+#   Ou use scripts/deploy-cpanel.sh, que faz a sequencia inteira.
+#
+# AJUSTE AO SEU AMBIENTE
+#   DEPLOYPATH e o Document Root do subdominio, visto em cPanel > Domains.
+#   Aqui: usuario grpia, subdominio juridflow.grupoddm.ia.br.
+#
+# O `cp -R origem/. destino/` copia o CONTEUDO, incluindo dotfiles como o
+# .htaccess. Com `origem/*` o .htaccess ficaria de fora e o roteamento da
+# aplicacao quebraria - toda rota interna daria 404 ao recarregar a pagina.
+
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/grpia/juridflow.grupoddm.ia.br
+    - /bin/mkdir -p $DEPLOYPATH
+    - >
+      if [ ! -f frontend/dist/index.html ]; then
+        echo "ERRO: frontend/dist/index.html nao existe.";
+        echo "Rode o build antes: cd frontend && npm ci && npm run build";
+        exit 1;
+      fi
+    - /bin/cp -R frontend/dist/. $DEPLOYPATH/
+    - echo "Frontend publicado em $DEPLOYPATH"

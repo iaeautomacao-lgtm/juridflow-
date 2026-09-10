@@ -31,8 +31,8 @@ resolve, é gratuito e sai no ar em minutos.
 **Prefira um subdomínio só**, com a API em `/api` do mesmo endereço:
 
 ```
-juridflow.grupoddm.com.br         frontend
-juridflow.grupoddm.com.br/api     backend (Application URL do Node.js App)
+juridflow.grupoddm.ia.br         frontend
+juridflow.grupoddm.ia.br/api     backend (Application URL do Node.js App)
 ```
 
 | | Dois subdomínios | Um subdomínio |
@@ -69,33 +69,66 @@ mostrar, não o que você digitou.
 
 ---
 
-## 2. Preparar os arquivos localmente
+## 2. Trazer o código com o Git Version Control
 
-O cPanel não compila TypeScript. O build sai da sua máquina.
+cPanel → **Controle de Versão do Git** → **Criar**, apontando para o
+repositório. O clone fica em `/home/USUARIO/repositories/juridflow-`.
+
+Isso substitui upload por FTP: para publicar uma versão nova, basta `git pull`
+no servidor.
+
+### Onde o build acontece
+
+`frontend/dist` e `backend/dist` estão no `.gitignore` — build não entra em
+repositório. Então o clone traz só o código-fonte, e a compilação roda **no
+servidor**, no terminal da aplicação Node (é ele que carrega o PATH do Node).
+
+O repositório traz dois arquivos para isso:
+
+| Arquivo | Papel |
+|---|---|
+| `scripts/deploy-cpanel.sh` | sequência completa: pull, dependências, build, migrations, publicação |
+| `.cpanel.yml` | tarefas do botão *Deploy HEAD Commit* — só copia o `dist` já compilado |
+
+**Ajuste `DEPLOYPATH` nos dois** para o Document Root do seu subdomínio, visto
+em cPanel → Domains.
+
+### O caminho recomendado
+
+No terminal da aplicação Node:
 
 ```bash
-# backend
-cd backend
-npm ci
-npm run build          # gera backend/dist
-
-# frontend
-cd ../frontend
+cd ~/repositories/juridflow-
+bash scripts/deploy-cpanel.sh
 ```
+
+O script para com mensagem clara se algo faltar — `.env` ausente, `node` fora
+do PATH, build que não gerou arquivo. Ele **não** reinicia a aplicação: o
+comando de restart do Passenger varia por provedor, e um restart errado deixa
+a API fora do ar sem aviso. Reinicie pelo painel.
+
+### Se preferir compilar na sua máquina
+
+Funciona, e é mais rápido se a hospedagem tiver pouca memória — `vite build` e
+`tsc` consomem RAM, e shared hosting às vezes mata o processo:
+
+```bash
+cd backend  && npm run build
+cd ../frontend && npm run build
+```
+
+Depois envie `backend/dist`, `backend/prisma`, `package.json` e
+`package-lock.json` para a pasta da aplicação, e o **conteúdo** de
+`frontend/dist` para o Document Root.
+
+### `VITE_API_URL`
 
 O frontend precisa saber onde está a API **no momento do build** — depois não
-dá para mudar sem rebuildar. Edite `frontend/.env`:
+dá para mudar sem recompilar. Com a API em `/api` do mesmo subdomínio, o
+padrão do `.env.example` já serve:
 
 ```env
-# Mesma origem (API em /api do mesmo subdomínio) — nao precisa de URL completa:
 VITE_API_URL="/api"
-
-# Só use URL completa se a API ficar em outro domínio:
-# VITE_API_URL="https://api.juridflow.grupoddm.com.br/api"
-```
-
-```bash
-npm run build          # gera frontend/dist
 ```
 
 ---
@@ -143,7 +176,7 @@ DATABASE_URL="mysql://usuario_juridflow_app:SENHA@localhost:3306/usuario_juridfl
 JWT_SECRET="<cole aqui o valor gerado pelo comando acima>"
 JWT_EXPIRES_IN="12h"
 
-CORS_ORIGINS="https://juridflow.grupoddm.com.br"
+CORS_ORIGINS="https://juridflow.grupoddm.ia.br"
 
 DATAJUD_API_KEY="<chave pública do CNJ>"
 DATAJUD_TIMEOUT_MS=20000
@@ -166,7 +199,7 @@ removido do projeto. Se a viu num guia antigo, ignore.
    - **Node.js version**: 18.x ou 20.x
    - **Application mode**: `Production`
    - **Application root**: `juridflow-api`
-   - **Application URL**: `juridflow.grupoddm.com.br` + caminho `api`
+   - **Application URL**: `juridflow.grupoddm.ia.br` + caminho `api`
    - **Application startup file**: `dist/server.js`
 
 2. Enviar para a pasta `juridflow-api`:
@@ -198,7 +231,7 @@ npx prisma migrate deploy
 6. Conferir:
 
 ```bash
-curl https://juridflow.grupoddm.com.br/api/health
+curl https://juridflow.grupoddm.ia.br/api/health
 ```
 
 Deve responder `{"status":"OK",...}`. Se não subir, veja o log da aplicação no
@@ -206,42 +239,35 @@ painel — `config.ts` diz exatamente qual variável faltou.
 
 ---
 
-## 5. Subir o frontend
+## 5. Publicar o frontend
 
-1. cPanel → **Gerenciador de Arquivos**
-2. Ir na pasta do subdomínio (ou `public_html`)
-3. Enviar **o conteúdo de dentro** de `frontend/dist` — não a pasta `dist` em
-   si
-4. Criar `.htaccess` na raiz, para o roteamento da aplicação:
+Se usou `deploy-cpanel.sh`, já está feito — pule para o SSL.
 
-```apache
-<IfModule mod_rewrite.c>
-  RewriteEngine On
-  RewriteBase /
+Manualmente: envie o **conteúdo de dentro** de `frontend/dist` para o Document
+Root do subdomínio, não a pasta `dist` em si.
 
-  # Deixa /api para o Passenger (a API Node). Sem esta linha, o roteamento
-  # da SPA abaixo engole as chamadas da API e elas voltam como index.html.
-  RewriteRule ^api(/|$) - [L]
+### O `.htaccess` vem do build
 
-  # Arquivo ou diretório existente é servido direto.
-  RewriteCond %{REQUEST_FILENAME} -f [OR]
-  RewriteCond %{REQUEST_FILENAME} -d
-  RewriteRule ^ - [L]
+Ele vive em `frontend/public/.htaccess` e o Vite o copia para `dist/` em todo
+build. Fica versionado com o código, em vez de ser criado à mão no Gerenciador
+de Arquivos e esquecido no deploy seguinte.
 
-  # Qualquer outra rota cai no index.html, que a aplicação resolve.
-  RewriteRule . /index.html [L]
-</IfModule>
+Ao copiar, use `cp -R dist/. destino/` — com **ponto**, não `dist/*`. O
+asterisco não pega dotfiles, o `.htaccess` fica de fora, e o sintoma é que
+recarregar qualquer tela interna devolve 404.
 
-# Cache longo para os assets com hash no nome; nunca para o index.html.
-<IfModule mod_headers.c>
-  <FilesMatch "\.(js|css|woff2?|svg|png|jpg|jpeg|webp)$">
-    Header set Cache-Control "public, max-age=31536000, immutable"
-  </FilesMatch>
-  <FilesMatch "index\.html$">
-    Header set Cache-Control "no-cache, must-revalidate"
-  </FilesMatch>
-</IfModule>
-```
+O arquivo faz quatro coisas:
+
+| Regra | Efeito |
+|---|---|
+| exceção do `/api` antes do catch-all | deixa `/api` para o Passenger — **sem ela a API devolve HTML** |
+| catch-all para `index.html` | roteamento da aplicação funciona ao recarregar |
+| `Cache-Control` por tipo | assets com hash em cache eterno, `index.html` nunca |
+| `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` | cabeçalhos de segurança |
+
+O `Strict-Transport-Security` está comentado de propósito: ative depois de
+confirmar que o AutoSSL emitiu o certificado. Com HTTPS quebrado e HSTS
+ligado, o site fica inacessível pelo período do `max-age`.
 
 ### SSL
 
@@ -266,12 +292,12 @@ Em produção, o caminho é:
 
 ```bash
 SEED_TENANT_NOME="Grupo DDM" \
-SEED_EMAIL_DOMINIO="grupoddm.com.br" \
+SEED_EMAIL_DOMINIO="grupoddm.ia.br" \
 SEED_ADMIN_PASSWORD="<senha forte, temporária>" \
 npx ts-node src/seed.ts
 ```
 
-2. Entrar como `socio@grupoddm.com.br`
+2. Entrar como `socio@grupoddm.ia.br`
 3. **Trocar a senha no primeiro acesso**
 4. Cadastrar a equipe real em **Configurações → Perfis & Permissões**, com o
    cargo de cada um
@@ -287,7 +313,7 @@ cPanel → **Cron Jobs**. Duas vezes ao dia, manhã e fim de tarde, para pegar a
 publicação do dia:
 
 ```
-0 8,18 * * *   curl -s -X POST https://juridflow.grupoddm.com.br/api/captura/sincronizar-djen -H "Authorization: Bearer <token>" > /dev/null
+0 8,18 * * *   curl -s -X POST https://juridflow.grupoddm.ia.br/api/captura/sincronizar-djen -H "Authorization: Bearer <token>" > /dev/null
 ```
 
 O endpoint exige autenticação. Duas opções, nenhuma perfeita:
@@ -310,7 +336,7 @@ Confusão comum, então explícito:
 |---|---|---|
 | Onde roda | seu Windows | cPanel |
 | Banco | MariaDB em `localhost:3306` | MariaDB do cPanel |
-| Domínio | nenhum — `localhost:5173` | `juridflow.grupoddm.com.br` |
+| Domínio | nenhum — `localhost:5173` | `juridflow.grupoddm.ia.br` |
 | Precisa de internet | não | sim |
 | Dados | seed de teste | dados reais do escritório |
 | Para que serve | desenvolver e testar antes de publicar | o escritório usar |
