@@ -1,0 +1,35 @@
+node_modules/
+dist/
+build/
+
+# Segredos: .env preenchido nunca vai para o repositorio.
+# Padrao amplo de proposito: pega .env, .env.local, .env.bak, .env.old,
+# .env.producao e qualquer copia manual. Backup de .env contem segredo.
+.env*
+!.env.example
+
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Capturas de tela de sistema juridico contem dado pessoal de parte
+# processual: nome completo, papel no processo, numero CNJ, comarca e assunto
+# da acao. Somado a segredo profissional, nao entra em repositorio - nem
+# privado, porque `git rm` nao apaga do historico.
+PRINTS/
+prints/
+*.print.png
+
+# Mockup de marca: arquivo pesado e nao usado pela aplicacao. Referencia
+# visual fica fora do repositorio; o asset da UI, quando existir, vai para
+# frontend/public/.
+assets/

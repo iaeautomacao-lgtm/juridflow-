@@ -1,0 +1,33 @@
+# MariaDB local para desenvolvimento do JuridFlow.
+#
+# O schema passou de SQLite para MySQL/MariaDB porque o destino e cPanel.
+# Isso significa que o desenvolvimento local tambem precisa de um MariaDB -
+# este arquivo resolve isso sem instalar nada na maquina.
+#
+#   docker compose up -d
+#   cd backend && npm run migrate:dev && npm run seed
+#
+# Porta 3307 no host para nao conflitar com um MySQL ja instalado na 3306.
+
+services:
+  mariadb:
+    image: mariadb:11.4
+    container_name: juridflow-mariadb
+    restart: unless-stopped
+    ports:
+      - '3307:3306'
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: juridflow
+      MARIADB_USER: juridflow
+      MARIADB_PASSWORD: juridflow
+    volumes:
+      - juridflow-mariadb:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  juridflow-mariadb:

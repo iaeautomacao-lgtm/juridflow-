@@ -1,0 +1,403 @@
+// JuridFlow - Schema de dados
+//
+// Convencao de vinculo polimorfico (padrao "modulo"):
+// Recursos transversais (Andamento, Tarefa, Documento, Financeiro) nao usam FK
+// para uma entidade especifica. Eles se penduram em qualquer entidade de negocio
+// pelo par (chave_modulo, codigo_registro_vinculo).
+//
+//   chave_modulo            -> ver ChaveModulo em src/lib/modulos.ts
+//                              "processo" | "atendimento" | "contrato" | "pessoa"
+//   codigo_registro_vinculo -> id do registro dono, dentro daquele modulo
+//
+// Custo: perde-se integridade referencial por FK nesses quatro models.
+// Ganho: adicionar um modulo novo nao exige coluna nova nem migration nos
+// recursos transversais.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id            String   @id @default(uuid())
+  nome          String
+  cnpj          String?
+  criado_em     DateTime @default(now())
+  atualizado_em DateTime @updatedAt
+
+  users            User[]
+  processos        Processo[]
+  atendimentos     Atendimento[]
+  contratos        ContratoHonorarios[]
+  intimacoes       Intimacao[]
+  andamentos       Andamento[]
+  capturas         CapturaPush[]
+  tarefas          Tarefa[]
+  pessoas          Pessoa[]
+  financeiro       Financeiro[]
+  documentos       Documento[]
+  modelosDocumento ModeloDocumento[]
+  franquias        FranquiaCaptura[]
+  auditLogs        AuditLog[]
+  certificados     CertificadoDigital[]
+  feriados         Feriado[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  tenant_id String
+  nome      String
+  email     String   @unique
+  senha     String
+  cargo     String // ver CARGOS em src/lib/cargos.ts: socio | advogado | estagiario | financeiro
+  oab       String?
+  ativo     Boolean  @default(true)
+  criado_em DateTime @default(now())
+
+  tenant       Tenant               @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  auditLogs    AuditLog[]
+  certificados CertificadoDigital[]
+
+  @@index([tenant_id])
+}
+
+// ---------------------------------------------------------------------------
+// Modulos de negocio (donos de vinculo)
+// ---------------------------------------------------------------------------
+
+model Processo {
+  id                String   @id @default(uuid())
+  tenant_id         String
+  cnj               String
+  titulo            String
+  cliente           String
+  orgao             String // "TJSP", "TJRJ", "TRF3", "TST"
+  instancia         String
+  vara              String
+  comarca           String   @default("")
+  status            String // "Em Andamento" | "Suspenso" | "Arquivado" | "Concluso"
+  valor_causa       Decimal  @default(0) @db.Decimal(15, 2)
+  partes_json       String   @db.Text // [{ nome, papel }]
+  data_distribuicao DateTime @default(now())
+  criado_em         DateTime @default(now())
+  atualizado_em     DateTime @updatedAt
+
+  tenant     Tenant      @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  intimacoes Intimacao[]
+
+  @@index([tenant_id])
+  @@index([tenant_id, cnj])
+  @@index([tenant_id, status])
+}
+
+// CRM pre-processual (equivalente ao modulo Atendimento do Projuris).
+model Atendimento {
+  id             String   @id @default(uuid())
+  tenant_id      String
+  cliente_nome   String
+  telefone       String   @default("")
+  email          String   @default("")
+  assunto        String   @db.Text
+  fase           String // "primeiro_contato" | "analise_viabilidade" | "proposta_enviada" | "contrato_assinado" | "perdido"
+  valor_estimado Decimal  @default(0) @db.Decimal(15, 2)
+  origem         String   @default("")
+  data_inicio    DateTime @default(now())
+  criado_em      DateTime @default(now())
+  atualizado_em  DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([tenant_id, fase])
+}
+
+model ContratoHonorarios {
+  id               String    @id @default(uuid())
+  tenant_id        String
+  cliente_nome     String
+  titulo           String
+  valor_total      Decimal   @default(0) @db.Decimal(15, 2)
+  forma_pagamento  String    @default("")
+  tipo             String    @default("contratual") // "contratual" | "exito" | "sucumbencial" | "pro_labore"
+  percentual_exito Decimal?  @db.Decimal(5, 2)
+  status           String // "vigente" | "encerrado" | "inadimplente"
+  data_inicio      DateTime  @default(now())
+  data_fim         DateTime?
+  criado_em        DateTime  @default(now())
+  atualizado_em    DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([tenant_id, status])
+}
+
+model Pessoa {
+  id           String   @id @default(uuid())
+  tenant_id    String
+  nome         String
+  cpf_cnpj     String
+  tipo_cliente String // "cliente" | "parte_contraria" | "testemunha" | "perito" | "terceiro"
+  email        String   @default("")
+  telefone     String   @default("")
+  endereco     String?  @db.Text
+  cidade_uf    String   @default("")
+  ativo        Boolean  @default(true)
+  criado_em    DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([tenant_id, cpf_cnpj])
+}
+
+// ---------------------------------------------------------------------------
+// Recursos transversais (vinculo polimorfico por chave_modulo)
+// ---------------------------------------------------------------------------
+
+model Andamento {
+  id                      String   @id @default(uuid())
+  tenant_id               String
+  chave_modulo            String
+  codigo_registro_vinculo String
+  cnj                     String   @default("")
+  data                    DateTime @default(now())
+  orgao                   String
+  tipo                    String
+  cliente                 String   @default("")
+  descricao               String   @db.Text
+  fonte                   String   @default("manual") // "manual" | "datajud" | "djen"
+  lido                    Boolean  @default(false)
+  criado_em               DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([tenant_id, chave_modulo, codigo_registro_vinculo])
+  @@index([tenant_id, lido])
+}
+
+model Tarefa {
+  id                      String    @id @default(uuid())
+  tenant_id               String
+  chave_modulo            String?
+  codigo_registro_vinculo String?
+  titulo                  String
+  descricao               String?   @db.Text
+  tipo                    String    @default("Prazo") // "Prazo" | "Audiencia" | "Diligencia" | "Reuniao" | "Peca"
+  vencimento              DateTime
+  prazo_fatal             DateTime?
+  prioridade              String // "alta" | "media" | "baixa"
+  status                  String // "a_fazer" | "em_andamento" | "concluido"
+  responsavel_id          String?
+  responsavel_nome        String    @default("")
+  criado_em               DateTime  @default(now())
+  atualizado_em           DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([tenant_id, chave_modulo, codigo_registro_vinculo])
+  @@index([tenant_id, status])
+}
+
+model Documento {
+  id                      String   @id @default(uuid())
+  tenant_id               String
+  chave_modulo            String?
+  codigo_registro_vinculo String?
+  titulo                  String
+  categoria               String
+  tamanho_bytes           BigInt   @default(0)
+  url                     String   @db.Text
+  criado_em               DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([tenant_id, chave_modulo, codigo_registro_vinculo])
+}
+
+model Financeiro {
+  id                      String    @id @default(uuid())
+  tenant_id               String
+  chave_modulo            String?
+  codigo_registro_vinculo String?
+  descricao               String
+  valor                   Decimal   @db.Decimal(15, 2)
+  tipo_receita_despesa    String // "receita" | "despesa"
+  categoria               String // "Honorarios" | "Custas" | "Operacional" | "Pro-Labore" | "Sucumbencia"
+  data_vencimento         DateTime
+  data_pagamento          DateTime?
+  status_pago             Boolean   @default(false)
+  cliente                 String?
+  criado_em               DateTime  @default(now())
+  atualizado_em           DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([tenant_id, chave_modulo, codigo_registro_vinculo])
+  @@index([tenant_id, tipo_receita_despesa])
+}
+
+// ---------------------------------------------------------------------------
+// Captura oficial (DJEN / DataJud)
+// ---------------------------------------------------------------------------
+
+// Intimacao mantem FK direta para Processo: no Projuris a vinculacao de
+// intimacao e especifica de processo (/intimacao/{id}/vincular/processo/{id}),
+// nao polimorfica.
+model Intimacao {
+  id               String   @id @default(uuid())
+  tenant_id        String
+  cnj              String
+  disponibilizacao DateTime @default(now())
+  publicacao       DateTime @default(now())
+  orgao            String
+  cliente          String   @default("")
+  descricao        String   @db.Text
+  status           String // "pendente" | "vinculado" | "processo_nao_localizado" | "arquivado"
+  oab_uf           String
+  fonte            String   @default("djen")
+  id_externo       String? // id da comunicacao no DJEN, para deduplicacao
+  processo_id      String?
+  criado_em        DateTime @default(now())
+
+  tenant   Tenant    @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  processo Processo? @relation(fields: [processo_id], references: [id], onDelete: SetNull)
+
+  @@unique([tenant_id, id_externo])
+  @@index([tenant_id])
+  @@index([tenant_id, status])
+  @@index([processo_id])
+}
+
+model CapturaPush {
+  id                   String   @id @default(uuid())
+  tenant_id            String
+  cnj                  String
+  orgao                String
+  status               String // "ativa" | "pausada" | "erro"
+  grau                 String
+  cadastrar_automatico Boolean  @default(true)
+  capturar_docs        Boolean  @default(true)
+  ultima_verificacao   DateTime @default(now())
+  ultimo_erro          String?  @db.Text
+  criado_em            DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+  @@index([tenant_id, cnj])
+}
+
+model FranquiaCaptura {
+  id              String   @id @default(uuid())
+  tenant_id       String
+  termo_oab       String // "123456/SP"
+  nome_pesquisado String   @default("")
+  ufs             String   @default("")
+  status          String // "ativa" | "suspensa"
+  contratadas     Int      @default(100)
+  consumidas      Int      @default(0)
+  valor_mensal    Decimal  @default(0) @db.Decimal(15, 2)
+  criado_em       DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+}
+
+// ---------------------------------------------------------------------------
+// Calendario forense
+// ---------------------------------------------------------------------------
+
+// Feriados nacionais fixos e moveis NAO ficam aqui - sao calculados em
+// src/lib/feriados.ts (regra de lei, igual todo ano).
+// Esta tabela guarda o que varia por escritorio: feriado estadual, municipal
+// e suspensao de expediente forense de tribunal especifico.
+model Feriado {
+  id          String   @id @default(uuid())
+  tenant_id   String? // null = valido para todos os tenants
+  nome        String
+  data        DateTime @db.Date
+  abrangencia String // "estadual" | "municipal" | "forense"
+  uf          String?
+  municipio   String?
+  orgao       String? // sigla do tribunal, quando abrangencia = forense
+  criado_em   DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([data])
+  @@index([tenant_id, data])
+}
+
+// ---------------------------------------------------------------------------
+// Documentos e auditoria
+// ---------------------------------------------------------------------------
+
+model ModeloDocumento {
+  id                              String   @id @default(uuid())
+  tenant_id                       String
+  titulo                          String
+  categoria                       String
+  conteudo_template_com_variaveis String   @db.Text
+  criado_em                       DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+
+  @@index([tenant_id])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  tenant_id   String
+  usuario_id  String?
+  acao        String
+  entidade    String   @default("")
+  entidade_id String?
+  detalhe     String?  @db.Text
+  ip          String   @default("")
+  user_agent  String?  @db.Text
+  timestamp   DateTime @default(now())
+
+  tenant  Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  usuario User?  @relation(fields: [usuario_id], references: [id], onDelete: SetNull)
+
+  @@index([tenant_id])
+  @@index([tenant_id, timestamp])
+  @@index([tenant_id, entidade, entidade_id])
+}
+
+// Cadastro de certificado digital A1 para CONTROLE DE VALIDADE.
+//
+// ATENCAO: este model NAO armazena o certificado nem senha. Guarda apenas
+// metadado nao sigiloso (de quem e, qual OAB, quando vence) para o sistema
+// avisar o escritorio antes do vencimento.
+//
+// Armazenar o arquivo .pfx exige colunas de blob cifrado + iv + tag + key_id,
+// um model separado para credencial de tribunal, e infraestrutura que nao e
+// hospedagem compartilhada. Ver RELATORIO_ARQUITETURA.md, fase 2.
+model CertificadoDigital {
+  id            String   @id @default(uuid())
+  tenant_id     String
+  advogado_id   String?
+  advogado_nome String
+  oab           String
+  tipo          String   @default("A1") // A3 nao e viavel server-side (token fisico)
+  validade      DateTime
+  status        String // "valido" | "expirando" | "expirado"
+  criado_em     DateTime @default(now())
+
+  tenant   Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
+  advogado User?  @relation(fields: [advogado_id], references: [id], onDelete: SetNull)
+
+  @@index([tenant_id])
+  @@index([tenant_id, validade])
+}
