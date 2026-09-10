@@ -26,14 +26,29 @@ No cPanel, procure **Setup Node.js App** (ou *Criar Aplicação Node.js*).
 ### Você precisa de domínio novo?
 
 Não necessariamente. Um **subdomínio** de domínio que o Grupo DDM já tem
-resolve, é gratuito e sai no ar em minutos:
+resolve, é gratuito e sai no ar em minutos.
+
+**Prefira um subdomínio só**, com a API em `/api` do mesmo endereço:
 
 ```
-juridflow.grupoddm.com.br        frontend
-api.juridflow.grupoddm.com.br    backend
+juridflow.grupoddm.com.br         frontend
+juridflow.grupoddm.com.br/api     backend (Application URL do Node.js App)
 ```
+
+| | Dois subdomínios | Um subdomínio |
+|---|---|---|
+| Certificado SSL | dois | **um** |
+| CORS | configurar e acertar | **não existe** — mesma origem |
+| `VITE_API_URL` | URL completa | **`/api`**, o padrão do `.env.example` |
+
+Mesma origem significa que o navegador nem consulta CORS. Uma classe de erro
+a menos. O resto deste guia assume esse arranjo.
 
 Domínio novo só se quiser identidade própria para o produto.
+
+> Se o DNS do domínio estiver apontado para outro provedor, o subdomínio não
+> resolve sozinho: crie um registro **A** para `juridflow` apontando para o IP
+> do servidor cPanel, na zona DNS de quem hospeda o domínio.
 
 > **Isso não tem relação com o ambiente local.** MariaDB no seu Windows roda em
 > `localhost:3306`, sem domínio, sem cPanel e sem internet. Os dois ambientes
@@ -72,11 +87,11 @@ O frontend precisa saber onde está a API **no momento do build** — depois nã
 dá para mudar sem rebuildar. Edite `frontend/.env`:
 
 ```env
-# subdomínio separado para a API:
-VITE_API_URL="https://api.juridflow.grupoddm.com.br/api"
+# Mesma origem (API em /api do mesmo subdomínio) — nao precisa de URL completa:
+VITE_API_URL="/api"
 
-# ou mesmo domínio, API sob /api:
-# VITE_API_URL="https://juridflow.grupoddm.com.br/api"
+# Só use URL completa se a API ficar em outro domínio:
+# VITE_API_URL="https://api.juridflow.grupoddm.com.br/api"
 ```
 
 ```bash
@@ -150,11 +165,11 @@ removido do projeto. Se a viu num guia antigo, ignore.
 1. **Setup Node.js App** → *Create Application*
    - **Node.js version**: 18.x ou 20.x
    - **Application mode**: `Production`
-   - **Application root**: `juridflow-backend`
-   - **Application URL**: `api.juridflow.grupoddm.com.br`
+   - **Application root**: `juridflow-api`
+   - **Application URL**: `juridflow.grupoddm.com.br` + caminho `api`
    - **Application startup file**: `dist/server.js`
 
-2. Enviar para a pasta `juridflow-backend`:
+2. Enviar para a pasta `juridflow-api`:
 
 ```
 dist/                 build do backend
@@ -183,7 +198,7 @@ npx prisma migrate deploy
 6. Conferir:
 
 ```bash
-curl https://api.juridflow.grupoddm.com.br/health
+curl https://juridflow.grupoddm.com.br/api/health
 ```
 
 Deve responder `{"status":"OK",...}`. Se não subir, veja o log da aplicação no
@@ -203,6 +218,10 @@ painel — `config.ts` diz exatamente qual variável faltou.
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
+
+  # Deixa /api para o Passenger (a API Node). Sem esta linha, o roteamento
+  # da SPA abaixo engole as chamadas da API e elas voltam como index.html.
+  RewriteRule ^api(/|$) - [L]
 
   # Arquivo ou diretório existente é servido direto.
   RewriteCond %{REQUEST_FILENAME} -f [OR]
@@ -226,7 +245,7 @@ painel — `config.ts` diz exatamente qual variável faltou.
 
 ### SSL
 
-cPanel → **SSL/TLS Status** → *Run AutoSSL*, nos dois subdomínios.
+cPanel → **SSL/TLS Status** → *Run AutoSSL* no subdomínio.
 
 HTTPS não é opcional: sem ele, a senha do usuário e o token JWT trafegam em
 texto claro. E `CORS_ORIGINS` aponta para `https://` — em `http://` o navegador
@@ -268,7 +287,7 @@ cPanel → **Cron Jobs**. Duas vezes ao dia, manhã e fim de tarde, para pegar a
 publicação do dia:
 
 ```
-0 8,18 * * *   curl -s -X POST https://api.juridflow.grupoddm.com.br/api/captura/sincronizar-djen -H "Authorization: Bearer <token>" > /dev/null
+0 8,18 * * *   curl -s -X POST https://juridflow.grupoddm.com.br/api/captura/sincronizar-djen -H "Authorization: Bearer <token>" > /dev/null
 ```
 
 O endpoint exige autenticação. Duas opções, nenhuma perfeita:
