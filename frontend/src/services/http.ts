@@ -160,12 +160,44 @@ export async function request<T>(endpoint: string, opcoes: OpcoesRequisicao = {}
 
   const texto = await resposta.text();
   let corpo: any = null;
+  let respostaNaoEhJson = false;
+
   if (texto) {
     try {
       corpo = JSON.parse(texto);
     } catch {
-      corpo = { message: texto.slice(0, 300) };
+      respostaNaoEhJson = true;
+
+      // A resposta nao e JSON. A versao anterior usava os primeiros 300
+      // caracteres do texto como mensagem de erro - quando o servidor
+      // devolvia HTML, a tela de login exibia codigo-fonte da pagina no lugar
+      // da mensagem. Alem de ilegivel, esconde a causa real.
+      //
+      // HTML aqui quase sempre significa uma coisa so: a API nao esta
+      // respondendo, e o que voltou foi a propria pagina do frontend - pelo
+      // catch-all da SPA no .htaccess, ou por uma ErrorDocument do servidor.
+      const pareceHtml = /^\s*(<!doctype|<html|<\?xml)/i.test(texto);
+
+      corpo = {
+        message: pareceHtml
+          ? `A API nao respondeu em ${API_BASE_URL} (HTTP ${resposta.status}): ` +
+            'o servidor devolveu uma pagina web no lugar dos dados. ' +
+            'Verifique se a aplicacao do backend esta no ar.'
+          : `Resposta invalida do servidor (HTTP ${resposta.status}): ` +
+            texto.slice(0, 120).replace(/\s+/g, ' ').trim(),
+      };
     }
+  }
+
+  // Corpo nao-JSON com status de sucesso tambem e falha: quem chamou espera
+  // dado tipado. Sem este ramo, a pagina recebia { message: ... } no lugar do
+  // objeto esperado e quebrava depois, longe da causa.
+  if (resposta.ok && respostaNaoEhJson) {
+    const erro = new ApiError(corpo.message, resposta.status, endpoint, 'RESPOSTA_NAO_JSON');
+    if (!silencioso) {
+      publicarErro({ mensagem: corpo.message, status: resposta.status, endpoint, codigo: 'RESPOSTA_NAO_JSON' });
+    }
+    throw erro;
   }
 
   if (!resposta.ok) {
