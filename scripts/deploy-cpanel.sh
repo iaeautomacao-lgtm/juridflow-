@@ -107,7 +107,12 @@ elif npx prisma migrate deploy; then
     require("dotenv").config();
     const u = new URL(process.env.DATABASE_URL);
     const cp = require("child_process");
-    const sql = "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND engine<>\"InnoDB\";";
+    // Exclui _prisma_migrations: o Prisma a cria sem clausula de engine,
+    // entao ela herda o default do servidor. Nao tem FK nem indice longo -
+    // MyISAM ali e inofensivo, e contar ela daria falso alarme em todo deploy.
+    const sql = "SELECT GROUP_CONCAT(table_name) FROM information_schema.tables"
+      + " WHERE table_schema=DATABASE() AND engine<>\"InnoDB\""
+      + " AND table_name<>\"_prisma_migrations\";";
     try {
       // Senha via MYSQL_PWD, nao via -p: argumento de linha de comando
       // aparece no ps para qualquer usuario da maquina, e isto e hospedagem
@@ -120,17 +125,20 @@ elif npx prisma migrate deploy; then
         stdio: ["ignore", "pipe", "ignore"],
         env: { ...process.env, MYSQL_PWD: decodeURIComponent(u.password) }
       });
-      process.stdout.write(String(out).trim());
+      // GROUP_CONCAT devolve NULL (que o mysql -N imprime como "NULL")
+      // quando nenhuma linha casa - ou seja, quando esta tudo certo.
+      const r = String(out).trim();
+      process.stdout.write(r === "NULL" || r === "" ? "ok" : r);
     } catch { process.stdout.write("?"); }
   ' 2>/dev/null)
 
-  if [ "$MYISAM" = "0" ]; then
-    echo "  todas as tabelas em InnoDB"
+  if [ "$MYISAM" = "ok" ]; then
+    echo "  todas as tabelas do schema em InnoDB"
   elif [ "$MYISAM" = "?" ]; then
     echo "  AVISO: nao consegui verificar o engine das tabelas."
   else
     echo
-    echo "  ALERTA: $MYISAM tabela(s) fora do InnoDB."
+    echo "  ALERTA: fora do InnoDB -> $MYISAM"
     echo "  Chave estrangeira nao funciona em MyISAM - o MySQL ignora em"
     echo "  silencio, e o cascade a partir de Tenant deixa de existir."
     echo "  A migration precisa declarar ENGINE = InnoDB explicitamente."
