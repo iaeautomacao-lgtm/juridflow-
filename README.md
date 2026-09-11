@@ -134,6 +134,7 @@ npm run build                  # tsc --noEmit && vite build
 ├── .cpanel.yml               tarefas do Deploy HEAD Commit do cPanel
 ├── docker-compose.yml         MariaDB local (opcional, alternativa ao nativo)
 ├── DOCUMENTACAO.md            documentação completa
+├── DESIGN_SYSTEM.md           tokens, primitivos e estado da migração da UI
 ├── RELATORIO_ARQUITETURA.md   decisões e justificativas
 └── DEPLOY_CPANEL_MYSQL.md     roteiro de publicação
 ```
@@ -187,7 +188,8 @@ revisão de rota nova.
 | **alta** | Medir o atraso do DataJud por tribunal — afeta cálculo de prazo |
 | **alta** | Extrair pacote de tipos compartilhado entre frontend e backend |
 | **alta** | Teste automatizado, começando pelos conectores CNJ e cálculo de prazo |
-| média | Migrar a UI para os tokens do design system e ligar o tema escuro |
+| média | Migrar as 17 telas restantes para os tokens (fase 3) — ver [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) |
+| média | Ligar o tema escuro: os valores já existem, falta o controle (fase 4) |
 | média | Ligar um modelo de IA no assistente Flow (hoje são regras locais) |
 | média | Trava de isolamento entre escritórios no banco, não só no controller |
 | baixa | `react-router`, para link direto por tela |
@@ -199,4 +201,5 @@ seções 15 e 16.
 
 Documentação completa: [`DOCUMENTACAO.md`](DOCUMENTACAO.md) ·
 Decisões de arquitetura: [`RELATORIO_ARQUITETURA.md`](RELATORIO_ARQUITETURA.md) ·
+Design system: [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md) ·
 Deploy: [`DEPLOY_CPANEL_MYSQL.md`](DEPLOY_CPANEL_MYSQL.md)

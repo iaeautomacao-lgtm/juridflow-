@@ -273,23 +273,38 @@ dourada.
 Rampas completas de 50 a 950 para `juridflow` e `gold` em
 `frontend/tailwind.config.js`.
 
-**Tipografia:** `font-display` → Poppins (acompanha o wordmark: geométrico,
-caixa alta, pesado). `font-sans` → Inter para corpo de texto. Ambas carregadas
-em `frontend/index.html`.
+A interface não usa essas rampas diretamente. Ela usa **tokens semânticos**
+definidos como custom properties em `frontend/src/index.css` — `--superficie`,
+`--texto-suave`, `--marca`, `--ok`/`--atencao`/`--erro` — e expostos como
+classe pelo `tailwind.config.js` (`bg-superficie-alta`, `text-texto-suave`,
+`border-borda`). É isso que torna o tema escuro possível sem reescrever cada
+ponto de cor: o tema vira uma classe no `<html>` e os valores trocam embaixo
+dos mesmos nomes.
+
+**Tipografia:** `font-sans` → Inter, para corpo **e títulos**. `font-display` →
+Poppins, restrita ao wordmark do logo. Ambas carregadas em
+`frontend/index.html`.
+
+**Direção visual:** software jurídico corporativo / legal operations. Densidade
+de informação, raio de 8–10px, sombra quase imperceptível, verde/âmbar/vermelho
+reservados a estado.
 
 > ⚠️ **Os hex são provisórios.** Foram obtidos por conta-gotas num mockup JPEG
 > do logo. Quando o vetor oficial (SVG/AI) ou o manual de marca estiver
-> disponível, conferir e ajustar em `tailwind.config.js` — é o único lugar a
-> mudar.
+> disponível, conferir e ajustar em **dois** lugares: as rampas em
+> `tailwind.config.js` e as variáveis `--marca-*` em `src/index.css`.
 
-**Pendência: a UI ainda não usa estes tokens.** As telas carregam ~1.000
-classes literais de `slate-*` e `blue-*`, herdadas da fase ACORDIO. Os tokens
-existem e estão validados no build, mas a migração das classes é escopo
-próprio — não entrou no commit de rename para manter o diff revisável.
+**Estado da migração.** Fases 0 a 2 concluídas: camada de tokens, oito
+primitivos em `src/components/ui/`, shell (Sidebar, Topbar, App) e a tela de
+Andamentos. Restam 755 linhas com cor literal em 17 arquivos — fase 3.
+`npm run verificar:tokens` impede regressão no que já foi migrado.
 
-`darkMode: 'class'` já está configurado, mas **não há tema escuro
-implementado** — a UI é clara, com a barra lateral escura. Ligar o tema é
-trabalho de token em toda a interface, junto com a migração acima.
+`darkMode: 'class'` está configurado e os valores do tema escuro já existem no
+bloco `.dark` do `index.css`. Falta apenas o controle que alterna a classe —
+fase 4.
+
+Detalhamento completo, tabela de tokens, catálogo de primitivos e roteiro de
+migração em [`DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md).
 
 ---
 
@@ -530,18 +545,25 @@ servidor em nenhuma arquitetura. Somente A1 seria copiável.
 
 ### Estrutura de navegação
 
-Barra lateral fixa com sete grupos. Grupo com subitens abre no primeiro
-subitem ao ser clicado.
+Barra lateral fixa, agrupada em quatro seções rotuladas. Módulo com subitens
+abre no primeiro subitem ao ser clicado. Abaixo de 860px a barra colapsa para
+72px, só com ícones.
 
-| # | Grupo | Subitens | Restrição |
+| Seção | Módulo | Subitens | Restrição |
 |---|---|---|---|
-| 1 | **Painel de Controle** | — | — |
-| 2 | **Atividades & Kanban** | — | — |
-| 3 | **Contencioso** | Processos · Intimações DJEN · Central de Captura / Push · Andamentos Processuais | — |
-| 4 | **Gestão & CRM** | Pessoas & Clientes · Atendimento CRM | — |
-| 5 | **Financeiro** | Receitas & Despesas · Contratos de Honorários | `socio`, `financeiro` |
-| 6 | **Documentos & Modelos** | Gerenciador de Arquivos · Gerador de Peças | — |
-| 7 | **Configurações** | Painel Geral · Certificados & Auditoria | — |
+| Visão geral | **Painel de Controle** | — | — |
+| Visão geral | **Atividades & Kanban** | — | — |
+| Contencioso | **Processos** | Processos · Intimações DJEN · Central de Captura · Andamentos Processuais | — |
+| Gestão | **Clientes & CRM** | Pessoas & Clientes · Atendimento CRM | — |
+| Gestão | **Financeiro** | Receitas & Despesas · Contratos de Honorários | `socio`, `financeiro` |
+| Gestão | **Documentos** | Gerenciador de Arquivos · Gerador de Peças | — |
+| Sistema | **Configurações** | Painel Geral · Certificados & Auditoria | — |
+
+O assistente **Flow** fica acima das seções. Não é navegação — abre uma gaveta —
+mas é por ali que se chega a ele.
+
+O filtro por cargo do menu espelha o `requireCargo` do backend. Esconder o item
+é conveniência; quem protege o dado é o servidor, que responde `403`.
 
 Fora da lista: botão **Flow** no topo da lateral (abre gaveta lateral) e
 cartão de rodapé com escritório, nome, cargo e botão de saída.
