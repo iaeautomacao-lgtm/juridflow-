@@ -26,7 +26,7 @@ export const AtendimentoCRM: React.FC = () => {
   const fases = ['Primeiro Contato', 'Análise de Viabilidade', 'Proposta Enviada', 'Contrato Assinado'];
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">

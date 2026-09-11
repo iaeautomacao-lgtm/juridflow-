@@ -2,15 +2,158 @@
 @tailwind components;
 @tailwind utilities;
 
+/**
+ * Tokens do JuridFlow.
+ *
+ * Esta e a fonte unica de cor do produto. O tailwind.config.js apenas expoe
+ * estes valores como classes (bg-superficie, text-texto-suave, border-borda).
+ * Nenhum componente deve escrever hex, nem classe literal de paleta
+ * (slate-900, blue-600, indigo-500). Ha um script que verifica isso:
+ * npm run verificar:tokens
+ *
+ * Por que custom property e nao so a paleta do Tailwind: tema escuro. Com
+ * variavel, o tema e uma classe no <html> e os valores trocam embaixo dos
+ * mesmos nomes. Com classe literal, seria preciso escrever dark:bg-... em
+ * cada um dos ~1.200 pontos de cor da interface.
+ *
+ * Formato: triplas R G B sem virgula, exigencia do <alpha-value> do Tailwind,
+ * que permite bg-marca/14 (a mesma cor com 14% de opacidade).
+ *
+ * A paleta vem do logo - ver tailwind.config.js. Os hex de marca foram
+ * obtidos por conta-gotas num JPEG; quando o SVG oficial chegar, conferir os
+ * valores de --marca-* aqui e no config, que sao os dois unicos lugares.
+ */
 
 @layer base {
+  :root {
+    /* Superficies. A app assenta em superficie; cartao e superficie-alta. */
+    --superficie: 246 248 251; /* #F6F8FB */
+    --superficie-alta: 255 255 255; /* #FFFFFF */
+    --superficie-sutil: 244 247 251; /* #F4F7FB - campo de formulario */
+
+    /* Divisorias. 1px, discretas - a hierarquia vem do espaco, nao da linha. */
+    --borda: 226 232 240; /* #E2E8F0 */
+    --borda-forte: 203 213 225; /* #CBD5E1 */
+
+    /* Texto em tres niveis. Mais que tres vira ruido. */
+    --texto: 23 32 51; /* #172033 */
+    --texto-suave: 100 116 139; /* #64748B */
+    --texto-fraco: 148 163 184; /* #94A3B8 */
+
+    /* Marca: azul institucional do logo. E a unica cor de acao da interface. */
+    --marca: 46 108 164; /* #2E6CA4 - corpo da fita do logo */
+    --marca-escura: 23 54 93; /* #17365D - wordmark */
+    --marca-clara: 91 163 217; /* #5BA3D9 - fita superior */
+    --marca-fundo: 240 244 249; /* #F0F4F9 */
+
+    /* Navegacao lateral. Mais escura que o navy do wordmark de proposito: a
+       sidebar recua e o conteudo avanca. */
+    --nav: 11 19 36; /* #0B1324 */
+    --nav-alta: 19 31 54; /* #131F36 - hover */
+    --nav-texto: 182 194 214; /* #B6C2D6 */
+    --nav-texto-fraco: 114 131 161; /* #7283A1 */
+
+    /* Ouro do logo. Acento de marca, nunca estado. */
+    --ouro: 224 166 78; /* #E0A64E */
+
+    /* Estado - e SOMENTE estado. Verde, ambar e vermelho nao decoram nada
+       nesta interface: se aparecem, significam alguma coisa. */
+    --ok: 4 120 87; /* #047857 */
+    --ok-fundo: 209 250 229; /* #D1FAE5 */
+    --atencao: 180 83 9; /* #B45309 */
+    --atencao-fundo: 254 243 199; /* #FEF3C7 */
+    --erro: 185 28 28; /* #B91C1C */
+    --erro-fundo: 254 226 226; /* #FEE2E2 */
+  }
+
+  html {
+    /* Evita o flash branco ao rolar alem do fim em navegador WebKit. */
+    background-color: rgb(var(--superficie));
+  }
+
   body {
-    background-color: #F8FAFC;
-    color: #1E293B;
+    background-color: rgb(var(--superficie));
+    color: rgb(var(--texto));
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /**
+   * Foco visivel em tudo que recebe teclado.
+   *
+   * O padrao do Tailwind preserva o outline do navegador, mas varios pontos
+   * da interface usavam focus:outline-none sem por nada no lugar - quem
+   * navega por Tab ficava sem saber onde estava.
+   */
+  :focus-visible {
+    outline: 2px solid rgb(var(--marca));
+    outline-offset: 2px;
   }
 }
 
-/* Custom Scrollbar */
+/**
+ * Tema escuro.
+ *
+ * FORA do @layer base de proposito. O Tailwind faz tree-shaking do que esta
+ * dentro de @layer: seletor de classe que nao aparece no content e removido
+ * do bundle. Como nenhum elemento tem class="dark" ainda (o botao de tema e a
+ * fase 4), este bloco inteiro sumia do CSS compilado - e sumiria de novo a
+ * cada build. Seletor de elemento (:root, html, body) nao sofre isso, foi por
+ * isso que o bloco claro sobreviveu e este nao.
+ *
+ * Nao e inversao: os papeis se mantem (marca continua sendo a cor de acao),
+ * os valores e que mudam para continuar legiveis sobre fundo escuro. O azul
+ * #2E6CA4 nao tem contraste suficiente sobre #0F1623, entao no escuro o papel
+ * "marca" passa a ser ocupado pelo azul claro do logo.
+ */
+.dark {
+  --superficie: 15 22 35; /* #0F1623 */
+  --superficie-alta: 24 32 47; /* #18202F */
+  --superficie-sutil: 30 39 58; /* #1E273A */
+
+  --borda: 42 53 72; /* #2A3548 */
+  --borda-forte: 59 74 99; /* #3B4A63 */
+
+  --texto: 232 237 245; /* #E8EDF5 */
+  --texto-suave: 154 169 192; /* #9AA9C0 */
+  --texto-fraco: 107 124 150; /* #6B7C96 */
+
+  --marca: 91 163 217; /* #5BA3D9 */
+  --marca-escura: 143 175 206; /* #8FAFCE */
+  --marca-clara: 46 108 164; /* #2E6CA4 */
+  --marca-fundo: 22 40 61; /* #16283D */
+
+  --nav: 10 16 28; /* #0A101C */
+  --nav-alta: 22 32 50; /* #162032 */
+  --nav-texto: 182 194 214;
+  --nav-texto-fraco: 114 131 161;
+
+  --ouro: 236 199 124; /* #ECC77C */
+
+  --ok: 52 211 153; /* #34D399 */
+  --ok-fundo: 12 43 34; /* #0C2B22 */
+  --atencao: 251 191 36; /* #FBBF24 */
+  --atencao-fundo: 51 38 10; /* #33260A */
+  --erro: 248 113 113; /* #F87171 */
+  --erro-fundo: 51 20 20; /* #331414 */
+}
+
+/**
+ * Numero alinha em coluna.
+ *
+ * CNJ, valor e data aparecem empilhados em lista e tabela. Sem isto, o "1"
+ * ocupa menos largura que o "8" e a coluna de numeros dança de linha para
+ * linha - o olho perde a referencia ao comparar de cima a baixo.
+ *
+ * Tambem fora do @layer, pelo mesmo motivo do bloco acima.
+ */
+.tabular,
+table td,
+table th {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Barra de rolagem discreta. */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -21,15 +164,20 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
+  background: rgb(var(--borda-forte));
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94A3B8;
+  background: rgb(var(--texto-fraco));
 }
 
-/* Smooth transitions */
-.transition-all-fast {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

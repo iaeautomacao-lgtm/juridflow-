@@ -84,7 +84,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, onOpenIA }) =>
   const totalAndamentosNovos = Array.isArray(andamentos) ? andamentos.filter(a => a && !a.lido).length : 0;
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-6">
       {/* Banner de Boas-Vindas */}
       <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-900 rounded-2xl p-6 text-white shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative overflow-hidden">
         <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-blue-600/10 to-transparent pointer-events-none" />

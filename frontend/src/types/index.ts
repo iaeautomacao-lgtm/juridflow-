@@ -28,13 +28,30 @@ export interface Intimacao {
   advogadoNotificado: string;
 }
 
+/**
+ * Movimentacao processual.
+ *
+ * O campo `origem` foi removido. Ele era um literal
+ * 'DJEN' | 'TJSP' | 'TRF3' | 'STJ' | 'Captura Push' preenchido por um
+ * ternario no mapeador, que rotulava TODO andamento manual como "TJSP" -
+ * inclusive um lançado à mão num processo do TRT. O tribunal agora sai do
+ * proprio numero CNJ (ver lib/cnj.ts) e `fonte` diz apenas de onde o registro
+ * veio, que e o que o banco de fato guarda.
+ */
 export interface Andamento {
   id: string;
+  /** Registro vinculado (sem FK: par chave_modulo + codigo). */
   processoId: string;
+  chaveModulo: string;
   cnj: string;
   dataHora: string;
+  /** Tipo do movimento, ex.: "Juntada de peticao". */
+  tipo: string;
   descricao: string;
-  origem: 'DJEN' | 'TJSP' | 'TRF3' | 'STJ' | 'Captura Push';
+  /** Vara / orgao julgador. */
+  orgao: string;
+  cliente: string;
+  fonte: 'manual' | 'datajud' | 'djen';
   lido: boolean;
   temIntimacao: boolean;
 }

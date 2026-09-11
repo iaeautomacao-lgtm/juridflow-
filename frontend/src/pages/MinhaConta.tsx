@@ -50,7 +50,7 @@ export const MinhaConta: React.FC = () => {
   const acessos = ACESSO_POR_CARGO[usuario.cargo] ?? [];
 
   return (
-    <div className="p-6 space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 max-w-4xl mx-auto">
       <div>
         <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
           <UserCircle className="w-5 h-5 text-blue-600" /> Minha conta

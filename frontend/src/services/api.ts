@@ -120,14 +120,24 @@ function paraTarefa(t: any): Tarefa {
 }
 
 function paraAndamento(a: any): Andamento {
-  const fonte = String(a?.fonte ?? 'manual');
+  const bruto = String(a?.fonte ?? 'manual');
+  const fonte: Andamento['fonte'] =
+    bruto === 'djen' ? 'djen' : bruto === 'datajud' ? 'datajud' : 'manual';
+
+  // O backend ja devolvia orgao, tipo e cliente; o mapeador antigo descartava
+  // os tres e inventava a origem a partir da fonte. Ver o comentario do tipo
+  // Andamento em types/index.ts.
   return {
     id: String(a?.id ?? ''),
     processoId: String(a?.codigo_registro_vinculo ?? ''),
+    chaveModulo: String(a?.chave_modulo ?? ''),
     cnj: String(a?.cnj ?? a?.processo?.cnj ?? ''),
     dataHora: String(a?.data ?? ''),
+    tipo: String(a?.tipo ?? ''),
     descricao: String(a?.descricao ?? ''),
-    origem: fonte === 'djen' ? 'DJEN' : fonte === 'datajud' ? 'Captura Push' : 'TJSP',
+    orgao: String(a?.orgao ?? ''),
+    cliente: String(a?.cliente ?? ''),
+    fonte,
     lido: Boolean(a?.lido),
     temIntimacao: fonte === 'djen',
   };
