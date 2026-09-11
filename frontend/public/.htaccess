@@ -8,13 +8,17 @@
   RewriteEngine On
   RewriteBase /
 
-  # Deixa /api para o Passenger (a API Node).
+  # /api vai para a ponte PHP, que repassa para a API Node em
+  # 127.0.0.1:3001.
   #
-  # Sem esta linha, o catch-all da SPA logo abaixo engole as chamadas da API e
-  # devolve index.html. O sintoma e confuso: o frontend recebe HTML onde
-  # espera JSON e quebra com erro de parse, sem nada apontando para
-  # roteamento.
-  RewriteRule ^api(/|$) - [L]
+  # Esta hospedagem nao tem Passenger nem mod_proxy, entao nao ha como o
+  # Apache falar direto com o processo Node. O api.php faz esse caminho.
+  # Ver o cabecalho dele para as limitacoes.
+  #
+  # Precisa vir ANTES do catch-all da SPA: sem isso, toda chamada da API
+  # voltaria como index.html, e o frontend quebraria com erro de parse sem
+  # nada apontando para roteamento.
+  RewriteRule ^api(/.*)?$ api.php [QSA,L]
 
   # Arquivo ou diretorio que existe e servido direto.
   RewriteCond %{REQUEST_FILENAME} -f [OR]

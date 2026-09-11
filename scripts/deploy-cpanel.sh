@@ -76,7 +76,9 @@ mkdir -p "$DEPLOYPATH" || erro "nao consegui criar $DEPLOYPATH"
 cp -R dist/. "$DEPLOYPATH/" || erro "falha ao copiar para $DEPLOYPATH"
 [ -f "$DEPLOYPATH/index.html" ] || erro "index.html nao chegou ao destino."
 [ -f "$DEPLOYPATH/.htaccess" ] || erro ".htaccess nao chegou ao destino."
-echo "  index.html e .htaccess no ar em $DEPLOYPATH"
+[ -f "$DEPLOYPATH/api.php" ]   || erro "api.php nao chegou ao destino.
+Sem ele o Apache nao alcanca a API Node e /api devolve a pagina do frontend."
+echo "  index.html, .htaccess e api.php no ar em $DEPLOYPATH"
 
 # ---------------------------------------------------------------- 4/5
 titulo "4/5  Backend: dependencias e build"
@@ -163,17 +165,32 @@ fi
 
 # ----------------------------------------------------------------
 echo
+# A API nao e supervisionada por Passenger nesta hospedagem: quem a mantem
+# viva e o cron chamando manter-api.sh. Depois de um deploy o binario mudou,
+# entao o processo antigo precisa ser trocado pelo novo.
+titulo "Reiniciando a API"
+if [ -x "$REPO/scripts/manter-api.sh" ] || [ -f "$REPO/scripts/manter-api.sh" ]; then
+  pkill -u "$USER" -f "node .*juridflow.*dist/server.js" 2>/dev/null && sleep 2
+  bash "$REPO/scripts/manter-api.sh" && echo "  API respondendo" || echo "  AVISO: a API nao subiu - veja ~/logs/juridflow-manter.log"
+else
+  echo "  scripts/manter-api.sh nao encontrado"
+fi
+
+echo
 echo "-------------------------------------------------"
 echo "FRONTEND  publicado em $DEPLOYPATH"
 echo "          https://juridflow.grupoddm.ia.br"
 if [ "$MIGRACAO_OK" -eq 1 ]; then
   echo "BANCO     migrations aplicadas"
   echo
-  echo "Falta reiniciar a API:"
-  echo "  cPanel > Setup Node.js App > Restart Application"
+  echo "API       reiniciada pelo manter-api.sh"
   echo
-  echo "Depois confira:"
+  echo "Confira:"
   echo "  curl https://juridflow.grupoddm.ia.br/api/health"
+  echo
+  echo "Se ainda nao instalou o cron que mantem a API viva:"
+  echo "  cPanel > Cron Jobs > a cada 5 minutos:"
+  echo "  /bin/bash $REPO/scripts/manter-api.sh"
 else
   echo "BANCO     PENDENTE - veja a mensagem acima"
   echo
