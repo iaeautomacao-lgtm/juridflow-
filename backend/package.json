@@ -17,7 +17,8 @@
     "usuarios": "ts-node scripts/trocar-senha.ts",
     "trocar-senha": "ts-node scripts/trocar-senha.ts",
     "studio": "prisma studio",
-    "verificar": "ts-node scripts/verificar-calendario.ts && ts-node scripts/verificar-auth.ts && ts-node scripts/verificar-config.ts",
+    "verificar": "ts-node scripts/verificar-calendario.ts && ts-node scripts/verificar-auth.ts && ts-node scripts/verificar-config.ts && ts-node scripts/verificar-senha.ts",
+    "verificar:senha": "ts-node scripts/verificar-senha.ts",
     "verificar:config": "ts-node scripts/verificar-config.ts",
     "verificar:auth": "ts-node scripts/verificar-auth.ts"
   },

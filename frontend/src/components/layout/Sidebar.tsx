@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuth, Cargo } from '../../context/AuthContext';
-import { LogOut } from 'lucide-react';
+import { LogOut, KeyRound } from 'lucide-react';
 import { 
   LayoutDashboard, 
   CheckSquare, 
@@ -225,6 +225,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, onO
               {usuario ? `${usuario.nome} - ${ROTULO_CARGO[usuario.cargo]}` : ''}
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => setCurrentTab('minha-conta')}
+            aria-label="Minha conta"
+            title="Minha conta e senha"
+            className={`p-1.5 rounded-lg transition-colors shrink-0 ${
+              currentTab === 'minha-conta'
+                ? 'text-blue-400 bg-blue-500/10'
+                : 'text-slate-400 hover:text-slate-100 hover:bg-slate-700/50'
+            }`}
+          >
+            <KeyRound className="w-4 h-4" />
+          </button>
           <button
             type="button"
             onClick={sair}

@@ -16,6 +16,7 @@ import {
   Activity
 } from 'lucide-react';
 import { api } from '../../services/api';
+import { GestaoUsuarios } from './GestaoUsuarios';
 
 export const Configuracoes: React.FC = () => {
   const [abaAtiva, setAbaAtiva] = useState<'presto' | 'auditoria' | 'franquias' | 'usuarios'>('presto');
@@ -27,10 +28,6 @@ export const Configuracoes: React.FC = () => {
   const [avisoEscopo, setAvisoEscopo] = useState<string>('');
   const [loadingCert, setLoadingCert] = useState(false);
 
-  // Usuarios do escritorio, da API. Antes eram dois blocos fixos no JSX -
-  // "Dra. Gisele Oliveira" e "Dr. Roberto Santos" - com e-mail e perfil.
-  const [usuarios, setUsuarios] = useState<any[]>([]);
-  const [loadingUsuarios, setLoadingUsuarios] = useState(false);
 
   // Logs de Auditoria LGPD
   const [logs, setLogs] = useState<any[]>([]);
@@ -68,20 +65,6 @@ export const Configuracoes: React.FC = () => {
       loadCertificados();
     }
 
-    if (abaAtiva === 'usuarios') {
-      async function loadUsuarios() {
-        setLoadingUsuarios(true);
-        try {
-          const data = await api.getUsuarios();
-          setUsuarios(data.usuarios ?? []);
-        } catch (err) {
-          console.error(err);
-        } finally {
-          setLoadingUsuarios(false);
-        }
-      }
-      loadUsuarios();
-    }
   }, [abaAtiva]);
 
   // A lista de credenciais de tribunal e o fallback de logs de auditoria que
@@ -335,47 +318,7 @@ export const Configuracoes: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-card space-y-4">
-          <h3 className="font-bold text-sm text-slate-800">Usuários & Perfis de Acesso</h3>
-          <p className="text-[11px] text-slate-500">
-            O perfil define o que o backend autoriza. Financeiro e trilha de auditoria sao
-            restritos: advogado e estagiario recebem 403 nessas rotas.
-          </p>
-          <div className="space-y-2 text-xs">
-            {loadingUsuarios ? (
-              <p className="text-slate-400 py-4">Carregando...</p>
-            ) : usuarios.length === 0 ? (
-              <p className="text-slate-400 py-4">
-                Nenhum usuário cadastrado além do seu. Cadastre a equipe do escritório.
-              </p>
-            ) : (
-              usuarios.map((u) => (
-                <div
-                  key={u.id}
-                  className="flex justify-between items-center p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 gap-2"
-                >
-                  <div className="min-w-0">
-                    <p className="font-bold text-slate-800 truncate">{u.nome}</p>
-                    <p className="text-slate-500 truncate">
-                      {u.email}
-                      {u.oab ? ` • OAB ${u.oab}` : ''}
-                      {u.ativo ? '' : ' • inativo'}
-                    </p>
-                  </div>
-                  <span
-                    className={`px-2 py-0.5 rounded font-bold shrink-0 ${
-                      u.cargo === 'socio'
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-slate-200 text-slate-700'
-                    }`}
-                  >
-                    {u.cargo}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+        <GestaoUsuarios />
       )}
     </div>
   );

@@ -5,6 +5,17 @@ import { tratarErro } from '../lib/httpError';
 import { lerPaginacao, envelope } from '../lib/pagination';
 import { CARGOS, isCargo } from '../lib/cargos';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { registrarAuditoria } from '../middleware/auditLogger';
+import { validarSenha } from '../lib/senha';
+
+function ipDaRequisicao(req: AuthenticatedRequest): string {
+  return (
+    (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0].trim() ||
+    req.ip ||
+    req.socket.remoteAddress ||
+    ''
+  );
+}
 
 // --------------------------------------------------------------------------
 // Certificados digitais - CONTROLE DE VALIDADE
@@ -212,8 +223,9 @@ export const createUsuario = async (req: AuthenticatedRequest, res: Response) =>
     if (!email || !String(email).includes('@')) {
       return res.status(400).json({ message: 'E-mail invalido.' });
     }
-    if (typeof senha !== 'string' || senha.length < 10) {
-      return res.status(400).json({ message: 'A senha deve ter ao menos 10 caracteres.' });
+    const validacaoSenha = validarSenha(senha, { email: String(email), nome: String(nome) });
+    if (!validacaoSenha.valida) {
+      return res.status(400).json({ message: validacaoSenha.erro });
     }
     if (!isCargo(cargo)) {
       return res
@@ -236,9 +248,13 @@ export const createUsuario = async (req: AuthenticatedRequest, res: Response) =>
         tenant_id: tenantId,
         nome: String(nome).trim(),
         email: emailNormalizado,
-        senha: await bcrypt.hash(senha, 12),
+        senha: await bcrypt.hash(senha as string, 12),
         cargo,
         oab: oab ? String(oab).trim() : null,
+        // Senha definida pelo socio, nao pela pessoa: ela entra uma vez e e
+        // obrigada a trocar. Ate la, o authMiddleware so libera a rota de
+        // troca de senha.
+        senha_provisoria: true,
       },
       select: { id: true, nome: true, email: true, cargo: true, oab: true, ativo: true },
     });
@@ -264,14 +280,217 @@ export const setUsuarioAtivo = async (req: AuthenticatedRequest, res: Response) 
       return res.status(404).json({ message: 'Usuario nao encontrado.' });
     }
 
+    const desativando = !Boolean(ativo);
+
+    // Desativar o ultimo socio ativo deixaria o escritorio sem ninguem capaz
+    // de gerir usuarios, financeiro e auditoria - so o terminal resolveria.
+    if (desativando && usuario.cargo === 'socio') {
+      const outrosSocios = await prisma.user.count({
+        where: { tenant_id: tenantId, cargo: 'socio', ativo: true, id: { not: id } },
+      });
+      if (outrosSocios === 0) {
+        return res.status(409).json({
+          message:
+            'Este e o unico socio ativo do escritorio. Promova outro usuario a socio antes de desativa-lo.',
+          codigo: 'ULTIMO_SOCIO',
+        });
+      }
+    }
+
     const atualizado = await prisma.user.update({
       where: { id },
-      data: { ativo: Boolean(ativo) },
+      data: {
+        ativo: Boolean(ativo),
+        // Desativar precisa derrubar a sessao na hora. Sem isto, alguem
+        // desligado do escritorio seguiria acessando os autos ate o token
+        // expirar, ate 12 horas depois.
+        ...(desativando ? { token_valido_apos: new Date() } : {}),
+      },
       select: { id: true, nome: true, email: true, cargo: true, ativo: true },
+    });
+
+    await registrarAuditoria({
+      tenantId,
+      usuarioId: req.user!.id,
+      acao: desativando ? 'DESATIVAR_USUARIO' : 'ATIVAR_USUARIO',
+      entidade: 'usuario',
+      entidadeId: id,
+      detalhe: `${req.user!.email} ${desativando ? 'desativou' : 'reativou'} ${usuario.email}` +
+        (desativando ? '. Sessoes encerradas.' : '.'),
+      ip: ipDaRequisicao(req),
+      userAgent: String(req.headers['user-agent'] ?? ''),
     });
 
     return res.json({ usuario: atualizado });
   } catch (error) {
     return tratarErro(res, error, 'Erro ao alterar situacao do usuario');
+  }
+};
+
+/**
+ * Socio redefine a senha de outro usuario do escritorio.
+ *
+ * A senha nasce provisoria: quem a definiu nao foi o dono da conta, entao ela
+ * serve so para uma entrada, e o authMiddleware bloqueia tudo ate a troca.
+ * Sem isso, o socio ficaria sabendo a senha de acesso de um advogado - e a
+ * trilha de auditoria perderia o sentido, porque nao daria para distinguir o
+ * que foi feito por quem.
+ *
+ * Encerra tambem as sessoes ativas do usuario: se a redefinicao foi porque a
+ * conta estava comprometida, deixar a sessao do invasor viva anularia a medida.
+ */
+export const redefinirSenhaUsuario = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.tenant_id!;
+    const { id } = req.params;
+    const { senha_nova } = req.body ?? {};
+
+    const alvo = await prisma.user.findFirst({
+      where: { id, tenant_id: tenantId },
+      select: { id: true, nome: true, email: true, cargo: true },
+    });
+
+    if (!alvo) {
+      return res.status(404).json({ message: 'Usuario nao encontrado.' });
+    }
+
+    const validacao = validarSenha(senha_nova, { email: alvo.email, nome: alvo.nome });
+    if (!validacao.valida) {
+      return res.status(400).json({ message: validacao.erro });
+    }
+
+    await prisma.user.update({
+      where: { id },
+      data: {
+        senha: await bcrypt.hash(senha_nova as string, 12),
+        senha_provisoria: true,
+        token_valido_apos: new Date(),
+      },
+    });
+
+    await registrarAuditoria({
+      tenantId,
+      usuarioId: req.user!.id,
+      acao: 'REDEFINIR_SENHA_USUARIO',
+      entidade: 'usuario',
+      entidadeId: id,
+      detalhe:
+        `${req.user!.email} redefiniu a senha de ${alvo.email}. ` +
+        'Senha marcada como provisoria e sessoes encerradas.',
+      ip: ipDaRequisicao(req),
+      userAgent: String(req.headers['user-agent'] ?? ''),
+    });
+
+    return res.json({
+      message:
+        `Senha de ${alvo.email} redefinida. ` +
+        'Ela e provisoria: o usuario sera obrigado a definir uma nova no proximo acesso.',
+      usuario: { id: alvo.id, nome: alvo.nome, email: alvo.email },
+    });
+  } catch (error) {
+    return tratarErro(res, error, 'Erro ao redefinir a senha do usuario');
+  }
+};
+
+/**
+ * Socio edita nome, cargo e OAB de um usuario do escritorio.
+ *
+ * Nao permite alterar o proprio cargo, nem rebaixar o ultimo socio ativo: as
+ * duas coisas levariam o escritorio a ficar sem ninguem capaz de administrar.
+ */
+export const updateUsuario = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const tenantId = req.tenant_id!;
+    const { id } = req.params;
+    const { nome, cargo, oab } = req.body ?? {};
+
+    const alvo = await prisma.user.findFirst({ where: { id, tenant_id: tenantId } });
+    if (!alvo) {
+      return res.status(404).json({ message: 'Usuario nao encontrado.' });
+    }
+
+    const dados: Record<string, unknown> = {};
+
+    if (nome !== undefined) {
+      if (!String(nome).trim()) {
+        return res.status(400).json({ message: 'O nome nao pode ficar vazio.' });
+      }
+      dados.nome = String(nome).trim();
+    }
+
+    if (oab !== undefined) {
+      dados.oab = oab ? String(oab).trim() : null;
+    }
+
+    const mudouCargo = cargo !== undefined && cargo !== alvo.cargo;
+
+    if (cargo !== undefined) {
+      if (!isCargo(cargo)) {
+        return res
+          .status(400)
+          .json({ message: `Cargo invalido. Valores aceitos: ${CARGOS.join(', ')}.` });
+      }
+
+      // Auto-promocao e auto-rebaixamento saem pela mesma porta: se alguem
+      // pudesse mudar o proprio cargo, requireCargo viraria decoracao.
+      if (id === req.user!.id) {
+        return res.status(403).json({
+          message: 'Voce nao pode alterar o proprio cargo. Peca a outro socio.',
+          codigo: 'CARGO_PROPRIO',
+        });
+      }
+
+      if (mudouCargo && alvo.cargo === 'socio') {
+        const outrosSocios = await prisma.user.count({
+          where: { tenant_id: tenantId, cargo: 'socio', ativo: true, id: { not: id } },
+        });
+        if (outrosSocios === 0) {
+          return res.status(409).json({
+            message:
+              'Este e o unico socio ativo do escritorio. Promova outro usuario a socio antes de mudar o cargo dele.',
+            codigo: 'ULTIMO_SOCIO',
+          });
+        }
+      }
+
+      dados.cargo = cargo;
+    }
+
+    if (Object.keys(dados).length === 0) {
+      return res.status(400).json({ message: 'Nada para alterar.' });
+    }
+
+    // Mudanca de cargo encerra as sessoes: o cargo ja vem do banco a cada
+    // requisicao, mas forcar novo login evita que a pessoa siga vendo uma
+    // tela montada com as permissoes antigas.
+    if (mudouCargo) {
+      dados.token_valido_apos = new Date();
+    }
+
+    const atualizado = await prisma.user.update({
+      where: { id },
+      data: dados,
+      select: { id: true, nome: true, email: true, cargo: true, oab: true, ativo: true },
+    });
+
+    await registrarAuditoria({
+      tenantId,
+      usuarioId: req.user!.id,
+      acao: 'ATUALIZAR_USUARIO',
+      entidade: 'usuario',
+      entidadeId: id,
+      detalhe:
+        `${req.user!.email} alterou ${alvo.email}: ` +
+        Object.keys(dados)
+          .filter((k) => k !== 'token_valido_apos')
+          .join(', ') +
+        (mudouCargo ? ` (cargo ${alvo.cargo} -> ${cargo}, sessoes encerradas)` : ''),
+      ip: ipDaRequisicao(req),
+      userAgent: String(req.headers['user-agent'] ?? ''),
+    });
+
+    return res.json({ usuario: atualizado });
+  } catch (error) {
+    return tratarErro(res, error, 'Erro ao atualizar usuario');
   }
 };

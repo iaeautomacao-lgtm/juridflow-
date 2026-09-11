@@ -58,6 +58,21 @@ model User {
   ativo     Boolean  @default(true)
   criado_em DateTime @default(now())
 
+  /// Momento a partir do qual um token e aceito. Token emitido ANTES disto e
+  /// recusado pelo authMiddleware, mesmo com assinatura valida.
+  ///
+  /// E o que torna a revogacao imediata: sem este campo, o middleware so
+  /// verificava a assinatura, entao desativar um usuario ou trocar a senha
+  /// dele nao derrubava a sessao - ele seguia acessando ate o token expirar,
+  /// ate 12 horas depois. Alguem desligado do escritorio continuava dentro.
+  ///
+  /// Atualizado ao trocar senha, desativar usuario e mudar cargo.
+  token_valido_apos DateTime?
+
+  /// Senha definida por outra pessoa (seed, ou redefinicao pelo socio).
+  /// Enquanto true, o authMiddleware so libera a rota de troca de senha.
+  senha_provisoria Boolean @default(false)
+
   tenant       Tenant               @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
   auditLogs    AuditLog[]
   certificados CertificadoDigital[]
@@ -353,6 +368,28 @@ model ModeloDocumento {
   tenant Tenant @relation(fields: [tenant_id], references: [id], onDelete: Cascade)
 
   @@index([tenant_id])
+}
+
+/// Tentativas de login, para limitar forca bruta.
+///
+/// Em tabela e nao em memoria de proposito: sem Passenger, o processo Node e
+/// reiniciado pelo cron, e contador em memoria zeraria a cada reinicio - um
+/// atacante so precisaria esperar. Em banco tambem da visibilidade ao socio
+/// sobre tentativas contra as contas do escritorio.
+///
+/// Nao guarda a senha tentada, nem o hash dela. Registrar o que foi digitado
+/// transformaria esta tabela num deposito de senhas provaveis dos usuarios.
+model TentativaLogin {
+  id         String   @id @default(uuid())
+  /// Guardado em minusculas. Sem FK para User: tentativa contra e-mail
+  /// inexistente tambem precisa contar, senao varrer contas fica de graca.
+  email      String
+  ip         String
+  sucesso    Boolean  @default(false)
+  criado_em  DateTime @default(now())
+
+  @@index([email, criado_em])
+  @@index([ip, criado_em])
 }
 
 model AuditLog {

@@ -655,6 +655,25 @@ export const api = {
       { silencioso: true }
     ),
 
+  // -- Conta do proprio usuario --------------------------------------------
+
+  /**
+   * Troca a propria senha. Exige a senha atual: sem isso, um token roubado
+   * permitiria tomar a conta em definitivo.
+   *
+   * O backend encerra as outras sessoes e devolve um token novo, para o
+   * usuario nao ser deslogado da sessao em que esta.
+   */
+  trocarSenha: async (
+    senha_atual: string,
+    senha_nova: string
+  ): Promise<{ message: string; token: string }> =>
+    request('/auth/trocar-senha', {
+      method: 'POST',
+      body: { senha_atual, senha_nova },
+      silencioso: true,
+    }),
+
   // -- Configuracoes -------------------------------------------------------
 
   getAuditLogs: async (): Promise<any[]> => {
@@ -684,9 +703,30 @@ export const api = {
     senha: string;
     cargo: string;
     oab?: string;
-  }): Promise<any> => request('/configuracoes/usuarios', { method: 'POST', body: dados }),
+  }): Promise<{ usuario: any }> =>
+    request('/configuracoes/usuarios', { method: 'POST', body: dados, silencioso: true }),
 
-  // -- Dashboard -----------------------------------------------------------
+  updateUsuario: async (
+    id: string,
+    dados: { nome?: string; cargo?: string; oab?: string | null }
+  ): Promise<{ usuario: any }> =>
+    request(`/configuracoes/usuarios/${id}`, { method: 'PATCH', body: dados, silencioso: true }),
+
+  /** Redefine a senha de outro usuario. Ela nasce provisoria. */
+  redefinirSenhaUsuario: async (id: string, senha_nova: string): Promise<{ message: string }> =>
+    request(`/configuracoes/usuarios/${id}/redefinir-senha`, {
+      method: 'POST',
+      body: { senha_nova },
+      silencioso: true,
+    }),
+
+  setUsuarioAtivo: async (id: string, ativo: boolean): Promise<{ usuario: any }> =>
+    request(`/configuracoes/usuarios/${id}/ativo`, {
+      method: 'PATCH',
+      body: { ativo },
+      silencioso: true,
+    }),
+
 
   getDashboardKpis: async (): Promise<any> => request('/dashboard/kpis'),
   getDashboardAgenda: async (): Promise<any> => request('/dashboard/agenda'),

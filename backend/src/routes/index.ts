@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware, requireCargo } from '../middleware/auth';
+import { limitarLogin } from '../middleware/rateLimit';
 import { logUserAction } from '../middleware/auditLogger';
 
 import * as authController from '../controllers/authController';
@@ -33,8 +34,18 @@ const router = Router();
 // --------------------------------------------------------------------------
 // Autenticacao
 // --------------------------------------------------------------------------
-router.post('/auth/login', authController.login);
+// limitarLogin antes do controller: barra forca bruta por e-mail e por IP.
+router.post('/auth/login', limitarLogin, authController.login);
 router.get('/auth/me', authMiddleware, authController.getMe);
+
+// Troca da propria senha. Sem requireCargo de proposito - todo usuario
+// autenticado troca a sua. Exige a senha atual dentro do controller.
+router.post(
+  '/auth/trocar-senha',
+  authMiddleware,
+  logUserAction('UPDATE', 'senha_propria'),
+  authController.trocarSenha
+);
 
 // --------------------------------------------------------------------------
 // Dashboard
@@ -311,6 +322,20 @@ router.post(
   requireCargo('socio'),
   logUserAction('CREATE', 'usuario'),
   configuracoesController.createUsuario
+);
+router.patch(
+  '/configuracoes/usuarios/:id',
+  authMiddleware,
+  requireCargo('socio'),
+  logUserAction('UPDATE', 'usuario'),
+  configuracoesController.updateUsuario
+);
+router.post(
+  '/configuracoes/usuarios/:id/redefinir-senha',
+  authMiddleware,
+  requireCargo('socio'),
+  logUserAction('UPDATE', 'senha_usuario'),
+  configuracoesController.redefinirSenhaUsuario
 );
 router.patch(
   '/configuracoes/usuarios/:id/ativo',

@@ -30,6 +30,12 @@ export interface UsuarioSessao {
   email: string;
   cargo: 'socio' | 'advogado' | 'estagiario' | 'financeiro';
   oab?: string | null;
+  /**
+   * Senha definida por outra pessoa - pelo seed, ou redefinida pelo socio.
+   * Enquanto true, o backend recusa toda rota exceto a de troca de senha,
+   * e o frontend manda direto para a tela de troca.
+   */
+  senha_provisoria?: boolean;
   tenant: { id: string; nome: string; cnpj?: string | null };
 }
 

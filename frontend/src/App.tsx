@@ -7,6 +7,7 @@ import { FlowDrawer } from './components/ai/FlowDrawer';
 import { ApiErrorBanner } from './components/common/ApiErrorBanner';
 
 import { Login } from './pages/Login';
+import { TrocarSenha } from './pages/TrocarSenha';
 import { Dashboard } from './pages/Dashboard';
 import { Processos } from './pages/Contencioso/Processos';
 import { Intimacoes } from './pages/Contencioso/Intimacoes';
@@ -18,6 +19,7 @@ import { AtendimentoCRM } from './pages/Gestao/AtendimentoCRM';
 import { Financeiro } from './pages/Financeiro/Financeiro';
 import { Documentos } from './pages/Documentos/Documentos';
 import { Configuracoes } from './pages/Configuracoes/Configuracoes';
+import { MinhaConta } from './pages/MinhaConta';
 
 /**
  * Abas restritas por cargo.
@@ -116,6 +118,8 @@ function AreaLogada() {
               {(currentTab === 'arquivos' || currentTab === 'modelos') && <Documentos />}
 
               {(currentTab === 'configuracoes' || currentTab === 'presto') && <Configuracoes />}
+
+              {currentTab === 'minha-conta' && <MinhaConta />}
             </>
           )}
         </main>
@@ -147,7 +151,18 @@ function Portao() {
     );
   }
 
-  return usuario ? <AreaLogada /> : <Login />;
+  if (!usuario) {
+    return <Login />;
+  }
+
+  // Senha definida por outra pessoa - pelo seed, ou redefinida pelo socio.
+  // O backend recusa toda rota exceto a de troca, entao mostrar o sistema
+  // aqui renderizaria telas que so dariam 403.
+  if (usuario.senha_provisoria) {
+    return <TrocarSenha obrigatoria />;
+  }
+
+  return <AreaLogada />;
 }
 
 export function App() {

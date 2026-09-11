@@ -209,7 +209,19 @@ async function main(): Promise<void> {
 
   for (const u of usuarios) {
     await prisma.user.create({
-      data: { tenant_id: tenant.id, nome: u.nome, email: u.email, senha: hash, cargo: u.cargo, oab: u.oab },
+      data: {
+        tenant_id: tenant.id,
+        nome: u.nome,
+        email: u.email,
+        senha: hash,
+        cargo: u.cargo,
+        oab: u.oab,
+        // Os quatro nascem com a MESMA senha, definida por quem rodou o seed.
+        // Marcar como provisoria obriga cada um a definir a sua no primeiro
+        // acesso - sem isso, a trilha de auditoria perde sentido, porque
+        // qualquer um poderia ter agido como qualquer outro.
+        senha_provisoria: true,
+      },
     });
     console.log(`[seed] usuario ${u.cargo}: ${u.email}`);
   }

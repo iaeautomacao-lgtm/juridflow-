@@ -21,6 +21,14 @@ interface AuthState {
   sair: () => void;
   /** Verdadeiro se o cargo do usuario esta na lista. */
   podeAcessar: (...cargos: Cargo[]) => boolean;
+  /**
+   * Rele o usuario do backend.
+   *
+   * Usado depois de trocar a senha: o backend limpa senha_provisoria e o
+   * frontend precisa saber disso para liberar o sistema, sem exigir novo
+   * login.
+   */
+  recarregarUsuario: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -83,14 +91,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setMensagemSessao(null);
   }, []);
 
+  const recarregarUsuario = useCallback(async () => {
+    if (!sessao.getToken()) return;
+    try {
+      setUsuario(await api.getMe());
+    } catch {
+      // 401 ja derruba a sessao pelo evento global; aqui nao ha o que fazer.
+    }
+  }, []);
+
   const podeAcessar = useCallback(
     (...cargos: Cargo[]) => (usuario ? cargos.includes(usuario.cargo) : false),
     [usuario]
   );
 
   const valor = useMemo<AuthState>(
-    () => ({ usuario, carregando, mensagemSessao, entrar, sair, podeAcessar }),
-    [usuario, carregando, mensagemSessao, entrar, sair, podeAcessar]
+    () => ({ usuario, carregando, mensagemSessao, entrar, sair, podeAcessar, recarregarUsuario }),
+    [usuario, carregando, mensagemSessao, entrar, sair, podeAcessar, recarregarUsuario]
   );
 
   return <AuthContext.Provider value={valor}>{children}</AuthContext.Provider>;
