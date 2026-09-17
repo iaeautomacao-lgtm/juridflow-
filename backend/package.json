@@ -20,7 +20,9 @@
     "verificar": "ts-node scripts/verificar-calendario.ts && ts-node scripts/verificar-auth.ts && ts-node scripts/verificar-config.ts && ts-node scripts/verificar-senha.ts",
     "verificar:senha": "ts-node scripts/verificar-senha.ts",
     "verificar:config": "ts-node scripts/verificar-config.ts",
-    "verificar:auth": "ts-node scripts/verificar-auth.ts"
+    "verificar:auth": "ts-node scripts/verificar-auth.ts",
+    "capturar": "node dist/jobs/capturar.js",
+    "capturar:diagnostico": "node dist/jobs/capturar.js --diagnostico"
   },
   "dependencies": {
     "@prisma/client": "^5.10.2",

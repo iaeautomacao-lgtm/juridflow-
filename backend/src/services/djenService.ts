@@ -140,6 +140,22 @@ async function buscarPagina(
     .filter((c): c is ComunicacaoDjen => c !== null);
 }
 
+/**
+ * Consulta o DJEN e devolve o que veio, sem gravar nada.
+ *
+ * Existe para o diagnostico da captura agendada poder responder "o canal
+ * esta de pe e enxerga esta OAB?" sem tocar no banco. Nenhuma credencial
+ * envolvida: o DJEN e canal publico, a consulta leva apenas numero e UF da
+ * OAB - a mesma informacao que consta em qualquer peticao protocolada.
+ */
+export async function consultarDjenSemGravar(
+  oabUf: string,
+  pagina = 1
+): Promise<ComunicacaoDjen[]> {
+  const { numero, uf } = parseOabUf(oabUf);
+  return buscarPagina(numero, uf, pagina);
+}
+
 export interface ResultadoSincronizacaoDjen {
   oab_uf: string;
   capturadas: number;
