@@ -40,27 +40,55 @@ app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use(serializadorPrisma);
 
-app.get('/health', async (_req, res) => {
+/**
+ * Healthcheck.
+ *
+ * Responde em dois caminhos, por motivos diferentes:
+ *
+ *   /health      so alcancavel de dentro do servidor (127.0.0.1:3001). E o
+ *                que o manter-api.sh consulta para decidir se reinicia.
+ *
+ *   /api/health  alcancavel de fora, pela ponte PHP. Sem isto, conferir a API
+ *                pelo navegador devolvia 404 mesmo com tudo funcionando - o
+ *                proprio deploy-cpanel.sh mandava conferir este endereco, e a
+ *                resposta sempre parecia falha.
+ *
+ * O publico diz menos: status e hora, nada de nome de servico, ambiente ou
+ * estado do banco. Quem monitora de fora precisa saber se esta de pe; nao
+ * precisa saber o que ha dentro.
+ */
+async function bancoResponde(): Promise<boolean> {
   try {
     await prisma.$queryRaw`SELECT 1`;
-    res.json({
-      status: 'OK',
-      service: 'JuridFlow Backend API',
-      banco: 'conectado',
-      ambiente: config.nodeEnv,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (error: any) {
-    // Healthcheck que ignora o banco nao serve para nada: o processo pode
-    // estar de pe e a aplicacao inteira inoperante.
-    res.status(503).json({
-      status: 'DEGRADED',
-      service: 'JuridFlow Backend API',
-      banco: 'inacessivel',
-      erro: config.isProducao ? undefined : error?.message,
-      timestamp: new Date().toISOString(),
-    });
+    return true;
+  } catch (erro: any) {
+    // O motivo nao vai na resposta - vai no log do servidor. Quem consulta o
+    // healthcheck de fora nao precisa da mensagem do driver do banco, e quem
+    // esta depurando precisa dela em algum lugar.
+    console.error('[JuridFlow] healthcheck: banco inacessivel:', erro?.message ?? erro);
+    return false;
   }
+}
+
+app.get('/health', async (_req, res) => {
+  // Healthcheck que ignora o banco nao serve para nada: o processo pode
+  // estar de pe e a aplicacao inteira inoperante.
+  const ok = await bancoResponde();
+  res.status(ok ? 200 : 503).json({
+    status: ok ? 'OK' : 'DEGRADED',
+    service: 'JuridFlow Backend API',
+    banco: ok ? 'conectado' : 'inacessivel',
+    ambiente: config.nodeEnv,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get('/api/health', async (_req, res) => {
+  const ok = await bancoResponde();
+  res.status(ok ? 200 : 503).json({
+    status: ok ? 'OK' : 'DEGRADED',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.use('/api', apiRoutes);
